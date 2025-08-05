@@ -20,6 +20,9 @@ DATE_SEARCH_RANGE_DAYS = 7
 # Name of the log file that will be created.
 LOG_FILE = 'categorizer.log'
 
+# Directory to store the final zipped patient folders.
+ZIPPED_DIR = './lucknow'
+
 # --- SCRIPT ---
 
 def print_banner():
@@ -33,6 +36,7 @@ def print_banner():
                                                                             
     """
     print(banner)
+    print("[INFO] Banner displayed.")
 
 def setup_logging():
     logging.basicConfig(
@@ -48,6 +52,7 @@ def setup_logging():
     console_handler.setFormatter(formatter)
     logging.getLogger().addHandler(console_handler)
     logging.info("Logging started.")
+    print("[INFO] Logging started.")
 
 def parse_filename(filename):
     # Regex to capture name, day, month, and year from the filename.
@@ -56,6 +61,8 @@ def parse_filename(filename):
     match = pattern.match(filename)
 
     if not match:
+        logging.warning(f"Filename did not match expected pattern: {filename}")
+        print(f"[WARNING] Filename did not match expected pattern: {filename}")
         return None, None
 
     # Month mapping to convert abbreviated month names to numbers
@@ -73,16 +80,20 @@ def parse_filename(filename):
         month = month_map.get(month_str)
         if not month:
             logging.warning(f"Unrecognized month '{month_str}' in file: {filename}")
+            print(f"[WARNING] Unrecognized month '{month_str}' in file: {filename}")
             return None, None
 
         # Normalize year to 4 digits (e.g., '25' -> 2025)
         year = int(f"20{year_str}") if len(year_str) == 2 else int(year_str)
 
         report_date = datetime(year, month, day)
+        logging.info(f"Parsed filename '{filename}' -> name: {name}, date: {report_date}")
+        print(f"[SUCCESS] Parsed filename '{filename}' -> name: {name}, date: {report_date}")
         return name, report_date
 
     except (ValueError, IndexError) as e:
         logging.error(f"Could not parse date from filename '{filename}': {e}")
+        print(f"[ERROR] Could not parse date from filename '{filename}': {e}")
         return None, None
 
 # Add a function to get paths from the user
@@ -91,6 +102,8 @@ def get_paths_from_user():
     print("Please enter the required paths.")
     source_dir = input("Enter the SOURCE directory (where the PDF reports are located): ").strip()
     destination_dir = input("Enter the DESTINATION directory (where the patient folders are): ").strip()
+    print(f"[INFO] Source directory: {source_dir}")
+    print(f"[INFO] Destination directory: {destination_dir}")
     return source_dir, destination_dir
 
 # Update find_patient_folder to accept destination_dir as a parameter
@@ -105,14 +118,39 @@ def find_patient_folder(patient_name, report_date, destination_dir):
             for subfolder in os.listdir(date_folder_path):
                 if patient_name in subfolder.lower():
                     logging.info(f"Found match for '{patient_name}' in folder: {date_folder_path}")
+                    print(f"[SUCCESS] Found match for '{patient_name}' in folder: {date_folder_path}")
                     return os.path.join(date_folder_path, subfolder)
+    logging.warning(f"No folder found for '{patient_name}' in date range.")
+    print(f"[WARNING] No folder found for '{patient_name}' in date range.")
     return None
+
+def zip_and_move_folder(folder_path_to_zip):
+    """Zip the given folder, move the zip to ZIPPED_DIR, and delete the original folder."""
+    import shutil
+    import os
+    import logging
+    try:
+        base_name = os.path.basename(folder_path_to_zip.rstrip(os.sep))
+        zip_output_path = os.path.join(ZIPPED_DIR, base_name)
+        os.makedirs(ZIPPED_DIR, exist_ok=True)
+        # Create the zip file (shutil.make_archive adds .zip automatically)
+        archive_path = shutil.make_archive(zip_output_path, 'zip', root_dir=folder_path_to_zip)
+        logging.info(f"Successfully zipped folder '{folder_path_to_zip}' to '{archive_path}'")
+        print(f"[SUCCESS] Zipped folder '{folder_path_to_zip}' to '{archive_path}'")
+        # Delete the original folder
+        shutil.rmtree(folder_path_to_zip)
+        logging.info(f"Deleted original folder after zipping: '{folder_path_to_zip}'")
+        print(f"[SUCCESS] Deleted original folder after zipping: '{folder_path_to_zip}'")
+    except Exception as e:
+        logging.error(f"Error zipping or deleting folder '{folder_path_to_zip}': {e}")
+        print(f"[ERROR] Error zipping or deleting folder '{folder_path_to_zip}': {e}")
 
 # Update process_files to accept source_dir and destination_dir as parameters
 def process_files(source_dir, destination_dir):
     pdf_files = [f for f in os.listdir(source_dir) if f.lower().endswith('.pdf')]
     if not pdf_files:
         logging.info("No PDF files found in the source directory.")
+        print("[INFO] No PDF files found in the source directory.")
         return
 
     # Initialize the progress bar
@@ -126,12 +164,14 @@ def process_files(source_dir, destination_dir):
 
         if not patient_name or not report_date:
             logging.warning(f"Skipping file (could not parse): {filename}")
+            print(f"[WARNING] Skipping file (could not parse): {filename}")
             continue
 
         matched_folder_path = find_patient_folder(patient_name, report_date, destination_dir)
 
         if not matched_folder_path:
             logging.warning(f"No matching folder found for '{patient_name}' within {DATE_SEARCH_RANGE_DAYS} days of {report_date.date()}. Skipping: {filename}")
+            print(f"[WARNING] No matching folder found for '{patient_name}' within {DATE_SEARCH_RANGE_DAYS} days of {report_date.date()}. Skipping: {filename}")
             continue
 
         # Construct source and destination paths
@@ -142,8 +182,12 @@ def process_files(source_dir, destination_dir):
         try:
             shutil.copy2(source_path, destination_path)
             logging.info(f"SUCCESS: Copied '{filename}' to '{destination_path}'")
+            print(f"[SUCCESS] Copied '{filename}' to '{destination_path}'")
+            # Zip and move the patient folder after successful copy
+            zip_and_move_folder(matched_folder_path)
         except Exception as e:
             logging.error(f"FAILED to copy '{filename}'. Error: {e}")
+            print(f"[ERROR] FAILED to copy '{filename}'. Error: {e}")
 
 # Update main to use the new functions and parameters
 def main():
@@ -155,14 +199,16 @@ def main():
     # Check if directories exist
     if not os.path.isdir(source_dir):
         logging.error(f"Source directory not found: {source_dir}")
+        print(f"[ERROR] Source directory not found: {source_dir}")
         return
     if not os.path.isdir(destination_dir):
         logging.error(f"Destination directory not found: {destination_dir}")
+        print(f"[ERROR] Destination directory not found: {destination_dir}")
         return
         
     process_files(source_dir, destination_dir)
     logging.info("Processing complete.")
-    print("\nProcessing complete. Check 'categorizer.log' for details.")
+    print("[SUCCESS] Processing complete. Check 'categorizer.log' for details.")
 
 if __name__ == "__main__":
     # To use this script, you might need to install the 'tqdm' library:

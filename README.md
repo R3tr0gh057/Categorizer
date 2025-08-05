@@ -8,7 +8,8 @@ A Python automation script for categorizing PDF report files into patient folder
 - **Automatic File Parsing:** Extracts patient names and report dates from PDF filenames using a flexible pattern.
 - **Date Range Matching:** Searches for the correct patient folder within a configurable date range to account for delays between scan and report dates.
 - **Progress Bar:** Displays a progress bar for file processing using `tqdm`.
-- **Logging:** Logs all actions and warnings to both the console and a log file (`categorizer.log`).
+- **Logging & Status Messages:** Logs all actions and warnings to both the console and a log file (`categorizer.log`). All major actions also print a status message (success, warning, error, info) to the terminal for real-time feedback.
+- **Automatic Zipping & Archiving:** After a report is copied into a patient's folder, that folder is zipped and the resulting zip file is moved to the `./lucknow` directory. The original patient folder is then deleted.
 
 ## Requirements
 
@@ -37,7 +38,8 @@ pip install -r requirements.txt
 
 4. **Check results:**
    - Processed files will be copied to the appropriate patient folder.
-   - Review `categorizer.log` for a summary and any warnings.
+   - After each copy, the patient folder will be zipped and moved to the `./lucknow` directory, and the original folder will be deleted.
+   - Review `categorizer.log` and the terminal output for a summary and any warnings or errors.
 
 ## Filename Format
 
@@ -54,11 +56,13 @@ Report_of_ANJU_NCCT HEAD_25_Jul25.pdf
 
 - **Date Range:** The number of days to search back from the report date is set by `DATE_SEARCH_RANGE_DAYS` (default: 7 days).
 - **Log File:** All logs are written to `categorizer.log`.
+- **Zipped Directory:** The zipped patient folders are stored in the directory specified by `ZIPPED_DIR` (default: `./lucknow`).
 
 ## Troubleshooting
 
 - Ensure the source and destination directories exist and are accessible.
 - The script will log warnings if it cannot parse a filename or find a matching folder.
+- If you do not see zipped folders in `./lucknow`, check for errors in the terminal or log file.
 
 ## License
 
