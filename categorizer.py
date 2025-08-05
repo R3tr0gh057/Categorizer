@@ -125,7 +125,7 @@ def find_patient_folder(patient_name, report_date, destination_dir):
     return None
 
 def zip_and_move_folder(folder_path_to_zip):
-    """Zip the given folder, move the zip to ZIPPED_DIR, and delete the original folder."""
+    """Zip the given folder, move the zip to ZIPPED_DIR."""
     import shutil
     import os
     import logging
@@ -133,17 +133,12 @@ def zip_and_move_folder(folder_path_to_zip):
         base_name = os.path.basename(folder_path_to_zip.rstrip(os.sep))
         zip_output_path = os.path.join(ZIPPED_DIR, base_name)
         os.makedirs(ZIPPED_DIR, exist_ok=True)
-        # Create the zip file (shutil.make_archive adds .zip automatically)
         archive_path = shutil.make_archive(zip_output_path, 'zip', root_dir=folder_path_to_zip)
         logging.info(f"Successfully zipped folder '{folder_path_to_zip}' to '{archive_path}'")
         print(f"[SUCCESS] Zipped folder '{folder_path_to_zip}' to '{archive_path}'")
-        # Delete the original folder
-        shutil.rmtree(folder_path_to_zip)
-        logging.info(f"Deleted original folder after zipping: '{folder_path_to_zip}'")
-        print(f"[SUCCESS] Deleted original folder after zipping: '{folder_path_to_zip}'")
     except Exception as e:
-        logging.error(f"Error zipping or deleting folder '{folder_path_to_zip}': {e}")
-        print(f"[ERROR] Error zipping or deleting folder '{folder_path_to_zip}': {e}")
+        logging.error(f"Error zipping folder '{folder_path_to_zip}': {e}")
+        print(f"[ERROR] Error zipping folder '{folder_path_to_zip}': {e}")
 
 # Update process_files to accept source_dir and destination_dir as parameters
 def process_files(source_dir, destination_dir):

@@ -9,7 +9,7 @@ A Python automation script for categorizing PDF report files into patient folder
 - **Date Range Matching:** Searches for the correct patient folder within a configurable date range to account for delays between scan and report dates.
 - **Progress Bar:** Displays a progress bar for file processing using `tqdm`.
 - **Logging & Status Messages:** Logs all actions and warnings to both the console and a log file (`categorizer.log`). All major actions also print a status message (success, warning, error, info) to the terminal for real-time feedback.
-- **Automatic Zipping & Archiving:** After a report is copied into a patient's folder, that folder is zipped and the resulting zip file is moved to the `./lucknow` directory. The original patient folder is then deleted.
+- **Automatic Zipping & Archiving:** After a report is copied into a patient's folder, that folder is zipped and the resulting zip file is moved to the `./lucknow` directory..
 
 ## Requirements
 
@@ -38,7 +38,7 @@ pip install -r requirements.txt
 
 4. **Check results:**
    - Processed files will be copied to the appropriate patient folder.
-   - After each copy, the patient folder will be zipped and moved to the `./lucknow` directory, and the original folder will be deleted.
+   - After each copy, the patient folder will be zipped and moved to the `./lucknow` directory. The original folder will remain in place.
    - Review `categorizer.log` and the terminal output for a summary and any warnings or errors.
 
 ## Filename Format
