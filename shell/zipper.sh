@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# A parallel, resumable script to zip subdirectories.
+# A parallel, resumable script that zips subdirectories, skipping those without reports.
 
-echo "Z I P P E R - Shell Script Version"
-echo "------------------------------------"
+echo "Z I P P E R - Shell Script Version (Skips folders without reports)"
+echo "------------------------------------------------------------------"
 
 # --- 1. Get User Input ---
 read -p "Enter the BASE directory containing patient folders: " BASE_DIR
@@ -15,8 +15,16 @@ if [ ! -d "$BASE_DIR" ]; then
     exit 1
 fi
 
-# Create the destination directory if it doesn't exist
+# Create the destination directory
 mkdir -p "$ZIPPED_DIR"
+
+# Define and initialize the log file for skipped folders
+LOG_FILE="$ZIPPED_DIR/skipped_folders_log.log"
+export LOG_FILE # Export for use in xargs sub-shell
+# Clear any old log and add a header for the new run
+echo "Log of folders skipped for missing a PDF report. Run started: $(date)" > "$LOG_FILE"
+echo "-------------------------------------------------------------------" >> "$LOG_FILE"
+
 
 # --- 2. Find All Source Folders ---
 # -mindepth 2 assumes a structure like /Base/Month/Patient and skips the Month folders.
@@ -52,7 +60,7 @@ if [ "$REMAINING_COUNT" -eq 0 ]; then
     exit 0
 fi
 
-echo "INFO: $REMAINING_COUNT folders remaining to be zipped."
+echo "INFO: $REMAINING_COUNT folders remaining to be processed."
 
 # --- 5. The Parallel Zipping Engine ---
 
@@ -66,14 +74,22 @@ printf "%s\n" "${FOLDERS_TO_ZIP[@]}" | xargs -P 4 -I {} bash -c '
     # Extract the base name (e.g., "Patient_A")
     BASENAME=$(basename "$FOLDER_PATH")
     
-    echo "Zipping: $BASENAME"
-    
-    # Zipping command.
-    (
-        cd "$(dirname "$FOLDER_PATH")" && \
-        zip -r -q "$ZIPPED_DIR_ARG/$BASENAME.zip" "$BASENAME"
-    )
+    # --- MODIFIED BEHAVIOR: Check for PDF and decide to ZIP or SKIP ---
+    # Check if a .pdf file exists directly inside the folder.
+    if [ -z "$(find "$FOLDER_PATH" -maxdepth 1 -type f -name "*.pdf" -print -quit)" ]; then
+        # IF TRUE (no PDF found): Log the issue, display a warning, and SKIP.
+        echo "$BASENAME" >> "$LOG_FILE"
+        echo "WARNING: ''$BASENAME'' is missing a PDF report. SKIPPING this folder."
+    else
+        # IF FALSE (PDF was found): Proceed with zipping the folder.
+        echo "Zipping: $BASENAME"
+        (
+            cd "$(dirname "$FOLDER_PATH")" && \
+            zip -r -q "$ZIPPED_DIR_ARG/$BASENAME.zip" "$BASENAME"
+        )
+    fi
 '
 
-echo "------------------------------------"
+echo "------------------------------------------------------------------"
 echo "SUCCESS: Processing complete."
+echo "INFO: A log of folders that were skipped has been saved to: $LOG_FILE"
