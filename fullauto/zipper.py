@@ -44,6 +44,14 @@ def get_paths_from_config():
         exit(1)
 
 def zip_and_move_folder(folder_path_to_zip, zipped_dir):
+    # Check for .pdf files in the folder
+    has_pdf = any(f.lower().endswith('.pdf') for f in os.listdir(folder_path_to_zip))
+    if not has_pdf:
+        with open('folders-without-report.txt', 'a', encoding='utf-8') as f:
+            f.write(folder_path_to_zip + '\n')
+        logging.warning(f"No PDF found in '{folder_path_to_zip}'. Skipping compression and logging to folders-without-report.txt.")
+        print(f"[WARNING] No PDF found in '{folder_path_to_zip}'. Skipping compression and logging to folders-without-report.txt.")
+        return
     try:
         base_name = os.path.basename(folder_path_to_zip.rstrip(os.sep))
         zip_output_path = os.path.join(zipped_dir, base_name)
