@@ -25,42 +25,48 @@ Install Python dependencies with:
 pip install -r requirements.txt
 ```
 
+## Configuration (config.ini)
+
+Before running the scripts, create and edit a `config.ini` file in the project root with the following structure:
+
+```
+[SORTER]
+source_dir = D:\Path\To\PDFs
+destination_dir = D:\Path\To\PatientFolders
+
+[ZIPPER]
+base_dir = D:\Path\To\PatientFolders
+zipped_dir = D:\Path\To\ZippedOutput
+```
+
 ## Usage
 
-### 1. Sorting/Categorizing Reports (`sorter.py`)
+### 1. Automated Workflow (`run_all.bat`)
 
-- **Prepare your folders:**
-  - Place all PDF reports in a source directory (e.g., `./REPORT`).
-  - Ensure your destination directory contains subfolders named by date (e.g., `20240501`) and patient name.
-
-- **Run the sorter:**
-  ```bash
-  python sorter.py
+- To run both the sorting and zipping steps in sequence, use the provided batch script:
+  ```bat
+  run_all.bat
   ```
-  - Enter the path to your source directory (PDF reports).
-  - Enter the path to your destination directory (patient folders).
+- Ensure your `config.ini` is set up as described above.
+- The script will run `sorter.py` and then `zipper.py` using the paths from `config.ini`.
 
-- **Result:**
-  - Processed files will be copied to the appropriate patient folder.
-  - Review `categorizer.log` and the terminal output for a summary and any warnings or errors.
+### 2. Sorting/Categorizing Reports (`sorter.py`)
 
-### 2. Zipping Patient Folders (Python: `zipper.py`)
-
-- **Prepare your folders:**
-  - Ensure your patient folders are organized inside month folders (e.g., `base_dir/202405/PatientA`, `base_dir/202405/PatientB`, etc.).
-
-- **Run the zipper:**
+- The script now reads the source and destination directories from `config.ini` (see above).
+- Run with:
   ```bash
-  python zipper.py
+  python fullauto/sorter.py
   ```
-  - Enter the path to the **base directory** containing month folders.
-  - Enter the path to the directory where zipped patient folders should be stored.
+- No interactive input is required; all paths are taken from the config file.
 
-- **Result:**
-  - Each patient folder (inside each month folder) will be zipped and the resulting zip file will be moved to the specified zipped directory. The original folders remain in place.
-  - Already-zipped folders are skipped automatically (checkpointing).
-  - Zipping is performed in parallel for speed.
-  - Review `zipper.log` and the terminal output for a summary and any warnings or errors.
+### 3. Zipping Patient Folders (Python: `zipper.py`)
+
+- The script now reads the base and zipped directories from `config.ini` (see above).
+- Run with:
+  ```bash
+  python fullauto/zipper.py
+  ```
+- No interactive input is required; all paths are taken from the config file.
 
 ### 3. Zipping Patient Folders (Shell: `shell/zipper.sh`)
 
