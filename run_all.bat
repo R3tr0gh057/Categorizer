@@ -5,7 +5,7 @@ REM Activate virtual environment if needed (uncomment and edit if using venv)
 REM call venv\Scripts\activate
 
 REM Run sorter.py
-python fullauto\sorter.py
+python full-auto\sorter.py
 IF %ERRORLEVEL% NEQ 0 (
     echo [ERROR] sorter.py failed. Zipper will NOT run.
     pause
@@ -13,6 +13,6 @@ IF %ERRORLEVEL% NEQ 0 (
 )
 
 REM Run zipper.py
-python fullauto\zipper.py
+python full-auto\zipper.py
 
 pause
