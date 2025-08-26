@@ -10,8 +10,8 @@ from tqdm import tqdm
 
 # --- 1. CUSTOMIZE YOUR SETTINGS ---
 SEARCH_QUERY = 'has:attachment (filename:doc OR filename:docx)'
-DOWNLOAD_DIR = r'D:\Projects2025\Categorizer\data-fetching\Files'
-BODY_PART_KEYWORDS = ['brain', 'thorax', 'abdomen', 'pelvis', 'ct report']
+DOWNLOAD_DIR = r'D:\DATA\Desktop\Reports'
+BODY_PART_KEYWORDS = ['CT']
 DELETE_SOURCE_DOC_AFTER_CONVERSION = True
 # ------------------------------------
 
@@ -20,13 +20,12 @@ SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 def convert_with_libreoffice(source_path, output_dir):
     """Converts a document to PDF using the LibreOffice command line."""
     try:
-        # Command for LibreOffice conversion
         command = [
-            "soffice", # The LibreOffice executable
-            "--headless", # Run without opening the GUI
-            "--convert-to", "pdf", # Specify the output format
-            "--outdir", output_dir, # Specify the output directory
-            source_path # The input file to convert
+            "soffice",
+            "--headless",
+            "--convert-to", "pdf",
+            "--outdir", output_dir,
+            source_path
         ]
         subprocess.run(command, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
@@ -38,7 +37,7 @@ def convert_with_libreoffice(source_path, output_dir):
         return False
 
 def main():
-    """Authenticates, searches, filters, downloads, and converts documents using LibreOffice."""
+    """Authenticates, searches, filters, downloads, and converts documents."""
     creds = None
     if os.path.exists('token.json'):
         creds = Credentials.from_authorized_user_file('token.json', SCOPES)
@@ -58,16 +57,29 @@ def main():
             print(f"Created download directory: {DOWNLOAD_DIR}")
 
         service = build('gmail', 'v1', credentials=creds)
-        result = service.users().messages().list(userId='me', q=SEARCH_QUERY).execute()
-        messages = result.get('messages', [])
 
-        if not messages:
+        # --- NEW PAGINATION LOGIC ---
+        all_messages = []
+        page_token = None
+        print("Finding all matching messages (this may take a moment)...")
+        while True:
+            request = service.users().messages().list(userId='me', q=SEARCH_QUERY, pageToken=page_token)
+            response = request.execute()
+            messages = response.get('messages', [])
+            all_messages.extend(messages)
+            
+            page_token = response.get('nextPageToken')
+            if not page_token:
+                break # Exit the loop when there are no more pages
+        # --- END OF PAGINATION LOGIC ---
+
+        if not all_messages:
             print("No messages found matching your query.")
             return
 
-        print(f"Found {len(messages)} total messages with DOC/DOCX attachments. Filtering and processing now...")
+        print(f"Found {len(all_messages)} total messages with DOC/DOCX attachments. Filtering and processing now...")
         
-        for msg in tqdm(messages, desc="Processing Emails"):
+        for msg in tqdm(all_messages, desc="Processing Emails"):
             try:
                 txt = service.users().messages().get(userId='me', id=msg['id']).execute()
                 
@@ -98,7 +110,6 @@ def main():
                         
                         tqdm.write(f"  Downloaded '{filename}'. Converting with LibreOffice...")
                         
-                        # --- NEW HIGH-FIDELITY CONVERSION ---
                         success = convert_with_libreoffice(source_doc_path, DOWNLOAD_DIR)
 
                         if success:
@@ -107,9 +118,7 @@ def main():
                                 os.remove(source_doc_path)
                                 tqdm.write(f"  🗑️ Deleted source file: '{filename}'.")
                         else:
-                            # Keep the source file if conversion fails
                             tqdm.write(f"  ⚠️ Kept source file '{filename}' due to conversion failure.")
-
 
             except Exception as e:
                 tqdm.write(f"  ❌ Error processing message {msg['id']}: {e}")
