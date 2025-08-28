@@ -6,9 +6,14 @@ A Python automation toolkit for organizing and archiving PDF report files into p
 
 - **Interactive Path Selection:** All scripts prompt the user for the required directories.
 - **Automatic File Parsing (sorter.py):** Extracts patient names and report dates from PDF filenames using a flexible pattern.
+- **Advanced Sorting (updated-sorter.py):**
+  - Extracts patient name, body part/scan type, and age (from PDF) for robust folder matching.
+  - Multi-tiered matching: name → age → body part, to resolve ambiguities.
+  - Moves (not copies) files to the matched folder, cleaning up the source directory.
+  - Generates a detailed skipped reports log (`skipped_reports.txt`) with grouped reasons.
 - **Date Range Matching (sorter.py):** Searches for the correct patient folder within a configurable date range to account for delays between scan and report dates.
 - **Progress Bar:** Displays a progress bar for file processing using `tqdm` (Python scripts).
-- **Logging & Status Messages:** Logs all actions and warnings to both the console and a log file (`categorizer.log` for sorting, `zipper.log` for zipping). All major actions also print a status message (success, warning, error, info) to the terminal for real-time feedback.
+- **Logging & Status Messages:** Logs all actions and warnings to both a log file and the console. All major actions also print a status message (success, warning, error, info) to the terminal for real-time feedback.
 - **Automatic Zipping & Archiving (zipper.py & shell/zipper.sh):**
   - Zips each patient folder (inside month folders) and moves the resulting zip file to a user-specified directory. The original folders remain in place.
   - **Checkpointing:** Skips patient folders that have already been zipped (if a .zip file with the same name exists in the destination).
@@ -18,6 +23,7 @@ A Python automation toolkit for organizing and archiving PDF report files into p
 
 - Python 3.6+ (for Python scripts)
 - `tqdm` (for progress bar in Python scripts)
+- `pdfplumber` (for extracting age from PDF in updated-sorter.py)
 - Bash, `zip`, and `xargs` (for shell/zipper.sh)
 
 Install Python dependencies with:
@@ -50,25 +56,37 @@ zipped_dir = D:\Path\To\ZippedOutput
 - Ensure your `config.ini` is set up as described above.
 - The script will run `sorter.py` and then `zipper.py` using the paths from `config.ini`.
 
-### 2. Sorting/Categorizing Reports (`sorter.py`)
+### 2. Advanced Sorting/Categorizing Reports (`updated-sorter.py`)
 
-- The script now reads the source and destination directories from `config.ini` (see above).
+- This script provides advanced matching using patient name, age (from PDF), and body part/scan type (from filename).
+- **Interactive:** Prompts the user for the source and destination directories at runtime (does NOT use `config.ini`).
+- **Moves** files to the matched folder (does not copy).
+- **Generates** a detailed skipped reports log (`skipped_reports.txt`) with grouped reasons for each skipped file.
+- Run with:
+  ```bash
+  python data-fetching/Sorting/updated-sorter.py
+  ```
+- At the end, check the terminal summary, `categorizer.log`, and `skipped_reports.txt` for details.
+
+### 3. Sorting/Categorizing Reports (`sorter.py`)
+
+- The script reads the source and destination directories from `config.ini` (see above).
 - Run with:
   ```bash
   python fullauto/sorter.py
   ```
 - No interactive input is required; all paths are taken from the config file.
 
-### 3. Zipping Patient Folders (Python: `zipper.py`)
+### 4. Zipping Patient Folders (Python: `zipper.py`)
 
-- The script now reads the base and zipped directories from `config.ini` (see above).
+- The script reads the base and zipped directories from `config.ini` (see above).
 - Run with:
   ```bash
   python fullauto/zipper.py
   ```
 - No interactive input is required; all paths are taken from the config file.
 
-### 3. Zipping Patient Folders (Shell: `shell/zipper.sh`)
+### 5. Zipping Patient Folders (Shell: `shell/zipper.sh`)
 
 - **Prepare your folders:**
   - Same structure as above: patient folders inside month folders.
@@ -99,16 +117,20 @@ base_dir/
 ```
 - Only the patient folders (e.g., `PatientA`, `PatientB`, etc.) will be zipped.
 
-## Filename Format (`sorter.py`)
+## Filename Format (`sorter.py` and `updated-sorter.py`)
 
-The sorter script expects PDF filenames in the format:
+The sorter scripts expect PDF filenames to contain the patient name and (optionally) body part/scan type. Example:
 ```
-Report_of_<PATIENT_NAME>_<...>_<DAY>_<MONTH><YEAR>.pdf
+ANJU NCCT HEAD 25_Jul25.pdf
+RESHMA CT REPORT – THORAX (PLAIN AND CONTRAST).pdf
 ```
-Example:
-```
-Report_of_ANJU_NCCT HEAD_25_Jul25.pdf
-```
+
+- `updated-sorter.py` will extract the name and body part/scan type from the filename, and age from the PDF content.
+
+## Skipped Reports Log
+
+- Both sorter scripts generate a log of skipped files, but `updated-sorter.py` creates a detailed, grouped report in `skipped_reports.txt`.
+- Reasons include: ambiguous matches, missing folders, file already exists, parsing errors, etc.
 
 ## Configuration
 
