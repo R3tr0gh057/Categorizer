@@ -7,15 +7,8 @@ from tqdm import tqdm
 import pdfplumber
 
 # --- CONFIGURATION ---
-LOG_FILE = 'categorizer_optimized.log'
-SKIPPED_REPORTS_FILE = 'skipped_reports_after_retry.txt'
-REPROCESSED_SKIPPED_FILE = 'skipped_reports_final_retry.txt'
-
-# Keywords that are body parts or scan types.
-BODY_PART_KEYWORDS = [
-    'KUB', 'MRI', 'XRAY', 'BRAIN', 'THORAX', 'HRCT', 'NCCT', 
-    'PNS', 'CHEST', 'ABDOMEN', 'NECK', 'HEAD', 'SPINE', 'CECT'
-]
+LOG_FILE = 'categorizer_pdf_reader.log'
+SKIPPED_REPORTS_FILE = 'skipped_reports_final.txt'
 
 # --- SCRIPT ---
 def print_banner():
@@ -24,7 +17,7 @@ def print_banner():
     ############################################################
     #                                                          #
     #    S M A R T   R E P O R T   C A T E G O R I Z E R         #
-    #            (Version 9.0 - Optimized)                     #
+    #           (Version 10.0 - PDF Data Only)                 #
     #                                                          #
     ############################################################
     """
@@ -50,9 +43,8 @@ def setup_logging():
 
 def index_patient_folders(destination_dir):
     """
-    Scans the destination directory once and creates an index (dictionary)
-    mapping patient names to a list of their folder paths. This is a huge
-    performance optimization.
+    Scans the destination directory once and creates an index mapping
+    patient names to a list of their folder paths for performance.
     """
     print("\n[INFO] Indexing patient folders for faster matching... Please wait.")
     folder_index = {}
@@ -74,98 +66,63 @@ def index_patient_folders(destination_dir):
     print(f"[INFO] Indexing complete. Found {len(folder_index)} unique patient names.")
     return folder_index
 
-def extract_info_from_filename(filename):
+def extract_info_from_pdf(pdf_path):
     """
-    More robustly extracts patient's name and body part from a filename.
+    Extracts patient name, age, and body part directly from the PDF content.
+    This is now the primary source of information.
     """
-    clean_filename = re.sub(r'\s*\(\d+\)', '', os.path.splitext(filename)[0]).strip()
-    clean_filename = re.sub(r'\s+\d{1,2}\s*[mf]\s*', ' ', clean_filename, flags=re.IGNORECASE)
-    
-    for keyword in BODY_PART_KEYWORDS + ['CT']:
-        clean_filename = re.sub(f'({keyword})', r' \1', clean_filename, flags=re.IGNORECASE)
-
-    filename_upper = clean_filename.upper()
-    
-    name = None
-    body_part = None
-    description = ""
-
-    split_regex = r'\s+(CECT|CT)\s+'
-    match = re.search(split_regex, filename_upper)
-    
-    if match:
-        split_point = match.start()
-        name = clean_filename[:split_point].strip()
-        description = clean_filename[split_point:].upper()
-    else:
-        split_point = -1
-        for keyword in BODY_PART_KEYWORDS:
-            position = filename_upper.find(f' {keyword}')
-            if position != -1:
-                if split_point == -1 or position < split_point:
-                    split_point = position
-        
-        if split_point != -1:
-            name = clean_filename[:split_point].strip()
-            description = clean_filename[split_point:].upper()
-        else:
-            name = clean_filename
-
-    if description:
-        for keyword in BODY_PART_KEYWORDS:
-            if keyword in description:
-                body_part = keyword
-                break
-
-    if name:
-        name = re.sub(r'^[^a-zA-Z]+', '', name)
-        name = re.sub(r'[\s-]+$', '', name).lower().replace('cect', '').strip()
-        name = re.sub(r'^(mrs|mr|ms)\s*\.?\s*', '', name, flags=re.IGNORECASE).strip()
-
-        if name.upper() in BODY_PART_KEYWORDS or not name:
-            logging.warning(f"Name parsing resulted in an invalid name for: {filename}")
-            return None, None
-        logging.info(f"Extracted name: '{name}', Body Part: '{body_part}' from '{filename}'.")
-        return name, body_part
-    else:
-        logging.warning(f"Could not extract a valid name from filename: {filename}")
-        return None, None
-
-def extract_age_from_pdf(pdf_path):
-    """Opens a PDF and searches for the patient's age."""
     try:
         with pdfplumber.open(pdf_path) as pdf:
-            if not pdf.pages: return None
-            first_page_text = pdf.pages[0].extract_text()
-            if not first_page_text: return None
+            if not pdf.pages:
+                logging.warning(f"PDF has no pages: '{os.path.basename(pdf_path)}'")
+                return None, None, None
             
-            match = re.search(r'(\d{1,3})\s*Y(RS|EARS|R)?', first_page_text, re.IGNORECASE)
-            
-            if match:
-                age = match.group(1)
-                logging.info(f"Extracted age '{age}' from '{pdf_path}'.")
-                return age
-            else:
-                return None
-    except Exception as e:
-        logging.error(f"Failed to read PDF file '{pdf_path}'. Error: {e}")
-        return None
+            text = pdf.pages[0].extract_text()
+            if not text:
+                logging.warning(f"Could not extract text from: '{os.path.basename(pdf_path)}'")
+                return None, None, None
 
-def find_patient_folder(patient_name, body_part, source_pdf_path, folder_index):
-    """Finds the patient folder using the pre-built index for speed."""
+            name, age, body_part = None, None, None
+
+            # Extract Name
+            name_match = re.search(r"PATIENT'S NAME\s*:\s*(.*)", text, re.IGNORECASE)
+            if name_match:
+                name = name_match.group(1).strip()
+                # Clean titles like MR., MRS., etc.
+                name = re.sub(r'^(mrs|mr|ms|baby)\s*\.?\s*', '', name, flags=re.IGNORECASE).strip()
+
+            # Extract Age
+            age_match = re.search(r"AGE/SEX\s*:\s*(\d{1,3})\s*Y", text, re.IGNORECASE)
+            if age_match:
+                age = age_match.group(1).strip()
+
+            # Extract Investigation (Body Part)
+            investigation_match = re.search(r"INVESTIGATION\s*:\s*(.*)", text, re.IGNORECASE)
+            if investigation_match:
+                body_part_text = investigation_match.group(1).strip()
+                # Extract the main keyword like BRAIN, KUB, etc.
+                match = re.search(r'(BRAIN|KUB|THORAX|CHEST|ABDOMEN|NECK|HEAD|SPINE|PNS)', body_part_text, re.IGNORECASE)
+                if match:
+                    body_part = match.group(1)
+
+            if name and age:
+                 logging.info(f"PDF Read Success: Name='{name}', Age='{age}', Body Part='{body_part}' from '{os.path.basename(pdf_path)}'")
+                 return name, age, body_part
+            else:
+                logging.warning(f"Could not find all required fields (Name, Age) in '{os.path.basename(pdf_path)}'")
+                return None, None, None
+
+    except Exception as e:
+        logging.error(f"Failed to read PDF file '{os.path.basename(pdf_path)}'. Error: {e}")
+        return None, None, None
+
+
+def find_patient_folder(patient_name, age, body_part, folder_index):
+    """Finds the patient folder using data extracted ONLY from the PDF."""
     
-    search_names = [patient_name]
-    if patient_name.lower().startswith('baby '):
-        search_names.append(patient_name.lower().replace('baby ', '').strip())
+    search_name_key = " ".join(patient_name.lower().split())
     
-    potential_matches = []
-    for s_name in search_names:
-        # The key for the index is space-separated, not a set of words
-        s_name_key = " ".join(s_name.lower().split())
-        if s_name_key in folder_index:
-            potential_matches.extend(folder_index[s_name_key])
-    
-    potential_matches = list(set(potential_matches))
+    potential_matches = folder_index.get(search_name_key, [])
 
     if not potential_matches:
         return None, f"No folder found for patient '{patient_name}'"
@@ -173,10 +130,8 @@ def find_patient_folder(patient_name, body_part, source_pdf_path, folder_index):
     if len(potential_matches) == 1:
         return potential_matches[0], 'Success'
 
-    logging.info(f"Found {len(potential_matches)} name matches for '{patient_name}'. Resolving with age...")
-    age = extract_age_from_pdf(source_pdf_path)
-    if not age:
-        return None, f"Ambiguous name match for '{patient_name}' and could not get age from PDF"
+    # If multiple name matches, filter by age
+    logging.info(f"Found {len(potential_matches)} name matches for '{patient_name}'. Verifying with age '{age}'...")
     
     age_pattern = re.compile(f"_{age}Y", re.IGNORECASE)
     age_matches = [path for path in potential_matches if age_pattern.search(os.path.basename(path))]
@@ -187,37 +142,12 @@ def find_patient_folder(patient_name, body_part, source_pdf_path, folder_index):
     else:
          return None, f"Found name matches for '{patient_name}', but none with age '{age}'"
 
-def get_skipped_files_list():
-    """Reads the specified skipped reports file to get a list of files to reprocess."""
-    if not os.path.exists(SKIPPED_REPORTS_FILE):
-        return None
-    
-    skipped_files = []
-    try:
-        with open(SKIPPED_REPORTS_FILE, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith('- '):
-                    filename = line[2:].strip()
-                    skipped_files.append(filename)
-        logging.info(f"Found {len(skipped_files)} files in '{SKIPPED_REPORTS_FILE}' to re-process.")
-        return skipped_files
-    except Exception as e:
-        logging.error(f"Could not read {SKIPPED_REPORTS_FILE}. Error: {e}")
-        return None
-
 def process_files(source_dir, destination_dir, folder_index):
-    """Processes PDF files, using the pre-built index."""
+    """Processes all PDF files in the source directory using PDF data."""
     
-    pdf_files_to_process = get_skipped_files_list()
-    if pdf_files_to_process is None:
-        print(f"\n[INFO] '{SKIPPED_REPORTS_FILE}' not found. Processing all PDF files in source directory.")
-        pdf_files_to_process = [f for f in os.listdir(source_dir) if f.lower().endswith('.pdf')]
-    else:
-        print(f"\n[INFO] Found '{SKIPPED_REPORTS_FILE}'. Attempting to re-process {len(pdf_files_to_process)} failed files.")
-
+    pdf_files_to_process = [f for f in os.listdir(source_dir) if f.lower().endswith('.pdf')]
     if not pdf_files_to_process:
-        logging.info("No PDF files to process.")
+        logging.info("No PDF files to process in source directory.")
         return [], 0
     
     skipped_files = []
@@ -227,17 +157,13 @@ def process_files(source_dir, destination_dir, folder_index):
     for filename in progress_bar:
         progress_bar.set_postfix_str(f"Processing: {filename[:30]}...")
         source_path = os.path.join(source_dir, filename)
-
-        if not os.path.exists(source_path):
-            skipped_files.append(('File Not Found in Source', filename))
-            continue
         
-        patient_name, body_part = extract_info_from_filename(filename)
-        if not patient_name:
-            skipped_files.append(('Name Parsing Failed', filename))
+        patient_name, age, body_part = extract_info_from_pdf(source_path)
+        if not patient_name or not age:
+            skipped_files.append(('PDF Read/Parse Failed', filename))
             continue
             
-        matched_folder_path, reason = find_patient_folder(patient_name, body_part, source_path, folder_index)
+        matched_folder_path, reason = find_patient_folder(patient_name, age, body_part, folder_index)
         
         if not matched_folder_path:
             skipped_files.append((reason, filename))
@@ -275,8 +201,8 @@ def write_skipped_files_report(skipped_list):
         grouped_skipped[reason].append(filename)
 
     try:
-        with open(REPROCESSED_SKIPPED_FILE, 'w') as f:
-            f.write(f"--- Skipped Reports Log (After Retry) ---\n")
+        with open(SKIPPED_REPORTS_FILE, 'w') as f:
+            f.write(f"--- Skipped Reports Log ---\n")
             f.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write("="*50 + "\n\n")
             
@@ -287,7 +213,7 @@ def write_skipped_files_report(skipped_list):
                     f.write(f"- {filename}\n")
                 f.write("\n")
 
-        logging.info(f"New skipped reports log created: {REPROCESSED_SKIPPED_FILE}")
+        logging.info(f"New skipped reports log created: {SKIPPED_REPORTS_FILE}")
     except Exception as e:
         logging.error(f"Could not write new skipped reports file. Error: {e}")
 
@@ -307,7 +233,6 @@ def main():
         logging.error("Source or destination directory not found. Please check paths.")
         return
         
-    # --- OPTIMIZATION: Index folders once at the start ---
     folder_index = index_patient_folders(destination_dir)
     
     skipped_reports, moved_count = process_files(source_dir, destination_dir, folder_index)
@@ -318,7 +243,7 @@ def main():
 
     if skipped_reports:
         write_skipped_files_report(skipped_reports)
-        print(f"A new list of remaining skipped files has been saved to '{REPROCESSED_SKIPPED_FILE}'")
+        print(f"A new list of remaining skipped files has been saved to '{SKIPPED_REPORTS_FILE}'")
     
     print(f"Check '{LOG_FILE}' for a detailed processing log.")
     logging.info("Processing complete.")
