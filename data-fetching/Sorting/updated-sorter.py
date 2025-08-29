@@ -17,7 +17,7 @@ def print_banner():
     ############################################################
     #                                                          #
     #    S M A R T   R E P O R T   C A T E G O R I Z E R         #
-    #           (Version 10.0 - PDF Data Only)                 #
+    #         (Version 10.2 - Robust PDF Reading)              #
     #                                                          #
     ############################################################
     """
@@ -84,15 +84,17 @@ def extract_info_from_pdf(pdf_path):
 
             name, age, body_part = None, None, None
 
-            # Extract Name
-            name_match = re.search(r"PATIENT'S NAME\s*:\s*(.*)", text, re.IGNORECASE)
+            # --- THE FIX IS HERE ---
+            # This regex now correctly looks for the name between the 'NAME' and 'AGE' fields,
+            # which is a more reliable pattern than looking for the 'DATE' field.
+            name_match = re.search(r"PATIENT'S NAME\s*:\s*(.*?)\s*AGE\s*/\s*SEX", text, re.IGNORECASE | re.DOTALL)
             if name_match:
                 name = name_match.group(1).strip()
                 # Clean titles like MR., MRS., etc.
                 name = re.sub(r'^(mrs|mr|ms|baby)\s*\.?\s*', '', name, flags=re.IGNORECASE).strip()
 
-            # Extract Age
-            age_match = re.search(r"AGE/SEX\s*:\s*(\d{1,3})\s*Y", text, re.IGNORECASE)
+            # Extract Age (allows for spaces around the '/')
+            age_match = re.search(r"AGE\s*/\s*SEX\s*:\s*(\d{1,3})\s*Y", text, re.IGNORECASE)
             if age_match:
                 age = age_match.group(1).strip()
 
@@ -109,7 +111,11 @@ def extract_info_from_pdf(pdf_path):
                  logging.info(f"PDF Read Success: Name='{name}', Age='{age}', Body Part='{body_part}' from '{os.path.basename(pdf_path)}'")
                  return name, age, body_part
             else:
-                logging.warning(f"Could not find all required fields (Name, Age) in '{os.path.basename(pdf_path)}'")
+                # Added more detailed logging to pinpoint the exact failure
+                if not name:
+                    logging.warning(f"Could not find Name in '{os.path.basename(pdf_path)}'")
+                if not age:
+                    logging.warning(f"Could not find Age in '{os.path.basename(pdf_path)}'")
                 return None, None, None
 
     except Exception as e:
