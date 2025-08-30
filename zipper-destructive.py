@@ -1,134 +1,123 @@
 import os
 import shutil
 import logging
-import functools
-import concurrent.futures
-
 from tqdm import tqdm
+import time
 
-LOG_FILE = 'zipper.log'
-
-def print_banner():
-    banner = r"""Z I P P E R 
-    """
-    print(banner)
+# --- CONFIGURATION ---
+# IMPORTANT: Set this to the path of the folder you want to process.
+BASE_FOLDER = r"" 
+# Keywords to look for in folder names (case-insensitive).
+KEYWORDS = ["chest", "head", "brain", "thorax"]
+# File to keep track of completed folders. This allows the script to be resumed.
+STATE_FILE = "processed_folders.log"
+# File for detailed logging.
+LOG_FILE = "processing_activity.log"
 
 def setup_logging():
+    """Configures logging to file and console."""
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(processName)s - %(levelname)s - %(message)s',
-        filename=LOG_FILE,
-        filemode='w'
+        format="%(asctime)s [%(levelname)s] - %(message)s",
+        handlers=[
+            logging.FileHandler(LOG_FILE),
+            logging.StreamHandler() # To also print to the console
+        ]
     )
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(levelname)s: %(message)s')
-    console_handler.setFormatter(formatter)
-    logging.getLogger().addHandler(console_handler)
-    logging.info("Logging started.")
-    print("[INFO] Logging started.")
 
-def get_paths_from_user():
-    print("Please enter the required paths.")
-    base_dir = input("Enter the BASE directory containing month folders: ").strip()
-    zipped_dir = input("Enter the directory where zipped patient folders should be stored: ").strip()
-    print(f"[INFO] Base directory: {base_dir}")
-    print(f"[INFO] Zipped directory: {zipped_dir}")
-    return base_dir, zipped_dir
+def load_processed_folders(state_file_path):
+    """Loads the set of already processed folders from the state file."""
+    if not os.path.exists(state_file_path):
+        return set()
+    with open(state_file_path, 'r') as f:
+        # Using a set for fast lookups (O(1) average time complexity)
+        processed = set(line.strip() for line in f)
+        logging.info(f"Loaded {len(processed)} previously processed folders from state file.")
+        return processed
 
-# --- MODIFIED FUNCTION ---
-def zip_and_move_folder(folder_path_to_zip, zipped_dir):
-    """
-    Worker function to process a single folder. Now includes detailed print statements.
-    """
-    base_name = os.path.basename(folder_path_to_zip.rstrip(os.sep))
-    print(f"[INFO] Processing: {base_name}...", flush=True)
+def mark_folder_as_processed(folder_name, state_file_path):
+    """Appends a folder name to the state file to mark it as complete."""
+    with open(state_file_path, 'a') as f:
+        f.write(f"{folder_name}\n")
 
-    # Check for .pdf files in the folder
-    has_pdf = any(f.lower().endswith('.pdf') for f in os.listdir(folder_path_to_zip))
-    if not has_pdf:
-        with open('folders-without-report.txt', 'a', encoding='utf-8') as f:
-            f.write(folder_path_to_zip + '\n')
-        logging.warning(f"No PDF found in '{folder_path_to_zip}'. Skipping.")
-        print(f"[WARNING] No PDF in '{base_name}', skipping.", flush=True)
-        return
+def find_folders_to_process(base_dir, keywords, already_processed):
+    """Scans the base directory and creates a list of folders to be zipped."""
+    target_folders = []
+    logging.info(f"Scanning '{base_dir}' for target folders...")
+    
+    # Use os.scandir() for better performance than os.listdir()
+    for entry in os.scandir(base_dir):
+        # 1. Check if it's a directory
+        if not entry.is_dir():
+            continue
 
-    try:
-        zip_output_path = os.path.join(zipped_dir, base_name)
-        os.makedirs(zipped_dir, exist_ok=True)
-        
-        # 1. Create the zip file
-        archive_path = shutil.make_archive(zip_output_path, 'zip', root_dir=folder_path_to_zip)
-        logging.info(f"Successfully zipped folder '{folder_path_to_zip}' to '{archive_path}'")
-        
-        # 2. Delete the original folder after successful zipping
-        shutil.rmtree(folder_path_to_zip)
-        logging.info(f"Successfully deleted original folder: '{folder_path_to_zip}'")
-        
-        print(f"[SUCCESS] Completed: {base_name}", flush=True)
+        # 2. Check if it's already been processed
+        if entry.name in already_processed:
+            continue
 
-    except Exception as e:
-        logging.error(f"Error processing folder '{folder_path_to_zip}': {e}")
-        print(f"[ERROR] Failed: {base_name}. Check log for details.", flush=True)
+        # 3. Check if its name contains any of the keywords
+        if not any(keyword in entry.name.lower() for keyword in keywords):
+            continue
 
-def process_folders(base_dir, zipped_dir):
-    # This function's logic remains the same, only the tqdm description is updated.
-    all_patient_folders = []
-    if os.path.isdir(base_dir):
-        month_folders = [os.path.join(base_dir, m) for m in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, m))]
-        for month_folder in month_folders:
-            for patient in os.listdir(month_folder):
-                patient_path = os.path.join(month_folder, patient)
-                if os.path.isdir(patient_path):
-                    all_patient_folders.append(patient_path)
+        # 4. Check if it contains at least one PDF file
+        try:
+            if any(file.name.lower().endswith('.pdf') for file in os.scandir(entry.path)):
+                target_folders.append(entry.path)
+            else:
+                logging.warning(f"Skipping '{entry.name}': Matches keywords but contains no PDF files.")
+        except OSError as e:
+            logging.error(f"Could not scan contents of '{entry.path}': {e}")
 
-    if not all_patient_folders:
-        logging.info("No patient folders found to zip in the source directory.")
-        return
-
-    completed_zips_basenames = set()
-    if os.path.isdir(zipped_dir):
-        for filename in os.listdir(zipped_dir):
-            if filename.endswith('.zip'):
-                base_name = os.path.splitext(filename)[0]
-                completed_zips_basenames.add(base_name)
-
-    folders_to_zip = []
-    for folder_path in all_patient_folders:
-        folder_basename = os.path.basename(folder_path)
-        if folder_basename not in completed_zips_basenames:
-            folders_to_zip.append(folder_path)
-
-    total_count = len(all_patient_folders)
-    completed_count = len(completed_zips_basenames)
-    remaining_count = len(folders_to_zip)
-
-    logging.info(f"Found {total_count} total patient folders.")
-    print(f"INFO: Found {total_count} total patient folders.")
-    if completed_count > 0:
-        logging.info(f"Found {completed_count} already completed zips. Resuming.")
-        print(f"INFO: Found {completed_count} already completed zips. Resuming.")
-
-    if not folders_to_zip:
-        logging.info("All folders have already been zipped. Nothing to do.")
-        print("[SUCCESS] All folders have already been zipped. Nothing to do.")
-        return
-
-    logging.info(f"{remaining_count} folders remaining to be zipped.")
-    print(f"INFO: {remaining_count} folders remaining to be zipped.")
-
-    worker_func = functools.partial(zip_and_move_folder, zipped_dir=zipped_dir)
-
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        list(tqdm(executor.map(worker_func, folders_to_zip), total=len(folders_to_zip), desc="Overall Progress"))
+    return target_folders
 
 def main():
-    print_banner()
+    """Main function to execute the folder processing workflow."""
     setup_logging()
-    base_dir, zipped_dir = get_paths_from_user()
-    process_folders(base_dir, zipped_dir)
-    logging.info("Processing complete.")
-    print("\n[SUCCESS] Processing complete. Check 'zipper.log' for details.")
+    logging.info("--- Starting Folder Processing Script ---")
+
+    if not os.path.isdir(BASE_FOLDER):
+        logging.error(f"Error: The specified BASE_FOLDER does not exist: '{BASE_FOLDER}'")
+        return
+
+    # Create full paths for state and log files to avoid clutter in other directories
+    state_file_path = os.path.join(BASE_FOLDER, STATE_FILE)
+    
+    processed_folders_set = load_processed_folders(state_file_path)
+    
+    folders_to_zip = find_folders_to_process(BASE_FOLDER, KEYWORDS, processed_folders_set)
+
+    if not folders_to_zip:
+        logging.info("No new folders to process. All tasks are complete. Exiting.")
+        return
+
+    logging.info(f"Found {len(folders_to_zip)} new folders to process.")
+    
+    # Wrap the list with tqdm for a progress bar
+    for folder_path in tqdm(folders_to_zip, desc="Zipping Folders", unit="folder"):
+        folder_name = os.path.basename(folder_path)
+        zip_name = os.path.join(BASE_FOLDER, folder_name)
+
+        try:
+            logging.info(f"Processing '{folder_name}'...")
+            
+            # Step 1: Create the zip archive
+            shutil.make_archive(zip_name, 'zip', folder_path)
+            logging.info(f"Successfully created archive: '{zip_name}.zip'")
+            
+            # Step 2: Delete the original folder
+            shutil.rmtree(folder_path)
+            logging.info(f"Successfully deleted original folder: '{folder_path}'")
+            
+            # Step 3: Mark as processed *after* all actions are successful
+            mark_folder_as_processed(folder_name, state_file_path)
+            
+        except Exception as e:
+            logging.error(f"!!! FAILED to process '{folder_name}': {e}")
+            logging.error("This folder will be re-attempted on the next run.")
+            # Add a small delay to prevent rapid-fire errors if there's a persistent issue
+            time.sleep(1)
+
+    logging.info("--- Script finished successfully ---")
 
 if __name__ == "__main__":
     main()
