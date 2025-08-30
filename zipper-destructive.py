@@ -104,11 +104,11 @@ def main():
             shutil.make_archive(zip_name, 'zip', folder_path)
             logging.info(f"Successfully created archive: '{zip_name}.zip'")
             
-            # Step 2: Delete the original folder
-            shutil.rmtree(folder_path)
-            logging.info(f"Successfully deleted original folder: '{folder_path}'")
+            # --- DESTRUCTIVE FUNCTION REMOVED ---
+            # The original folder is no longer deleted. The script now only
+            # creates a zip archive and leaves the source folder intact.
             
-            # Step 3: Mark as processed *after* all actions are successful
+            # Step 2: Mark as processed *after* the zip is created successfully
             mark_folder_as_processed(folder_name, state_file_path)
             
         except Exception as e:
