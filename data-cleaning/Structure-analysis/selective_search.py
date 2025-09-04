@@ -13,87 +13,117 @@ SEARCH_TERMS = [
     "Appendicite"
 ]
 
+# NEW: Name for the output report file.
+# This file will be saved in the same directory where you run the script.
+OUTPUT_FILE = "search_report.txt"
+
+
 logging.basicConfig(level=logging.WARNING)
 
 
-def find_all_pdfs(folders_to_scan):
+def find_and_process_pdfs(folders_to_scan, terms_with_acute, terms_without_acute):
     """
-    Scans all provided folders, including subdirectories, and returns a list of all PDF file paths.
-    This version includes a real-time progress indicator for the scanning process.
+    Finds and processes each PDF one by one, yielding individual counts for each search term.
     """
-    pdf_files = []
-    print("Finding all PDF files to scan... (This may take a while for large directories)")
-    dir_count = 0
+    print("Starting analysis... Press Ctrl+C to stop.")
     
+    exact_match_counts = {term: 0 for term in terms_with_acute}
+    partial_match_counts = {term: 0 for term in terms_without_acute}
+    
+    exact_match_files = set()
+    partial_match_files = set()
+    
+    pdf_generator = stream_pdfs(folders_to_scan)
+    
+    for pdf_path in tqdm(pdf_generator, desc="Analyzing Reports", unit="pdf", mininterval=1.0):
+        full_text = extract_text_from_pdf(pdf_path)
+        if full_text:
+            for term in terms_with_acute:
+                if term in full_text:
+                    exact_match_counts[term] += 1
+                    exact_match_files.add(pdf_path)
+            
+            for term in terms_without_acute:
+                if term in full_text:
+                    partial_match_counts[term] += 1
+                    partial_match_files.add(pdf_path)
+
+    return list(exact_match_files), list(partial_match_files), exact_match_counts, partial_match_counts
+
+def stream_pdfs(folders_to_scan):
+    """A generator that finds and 'yields' one PDF path at a time."""
     for folder in folders_to_scan:
         if not os.path.isdir(folder):
-            print(f"\nWarning: The folder '{folder}' does not exist and will be skipped.")
             continue
-        try:
-            for root, _, files in os.walk(folder, topdown=True):
-                dir_count += 1
-                # --- NEW: Real-time progress update ---
-                # This prints the progress on a single line that constantly updates.
-                # It updates every 100 directories to avoid slowing down the script.
-                if dir_count % 100 == 0:
-                    # Truncate the path display to keep the line clean
-                    display_path = (root if len(root) < 70 else "..." + root[-67:])
-                    print(f"\rScanned {dir_count} directories | Found {len(pdf_files)} PDFs | Current: {display_path}", end="")
-
-                for file in files:
-                    if file.lower().endswith('.pdf'):
-                        pdf_files.append(os.path.join(root, file))
-        except OSError as e:
-            print(f"\nError scanning a subdirectory in '{folder}': {e}")
-            
-    # --- NEW: Clear the progress line with a final message ---
-    final_message = f"Scan complete. Found a total of {len(pdf_files)} PDF files."
-    # Add padding to overwrite the previous line completely
-    print(f"\r{final_message:<120}") 
-    return pdf_files
+        for root, _, files in os.walk(folder, topdown=True):
+            for file in files:
+                if file.lower().endswith('.pdf'):
+                    yield os.path.join(root, file)
 
 def extract_text_from_pdf(pdf_path):
-    """
-    Reads all text from a PDF and returns it as a single lowercase string.
-    Returns None if the file cannot be read.
-    """
+    """Reads all text from a PDF and returns it as a single lowercase string."""
     try:
         with open(pdf_path, 'rb') as f:
             reader = PdfReader(f)
             return " ".join(page.extract_text().lower() for page in reader.pages if page.extract_text())
     except Exception:
-        # Simplified error handling for this part
         return None
 
 def main():
     """Main function to orchestrate the PDF search and reporting."""
     terms_with_acute = [term.lower() for term in SEARCH_TERMS]
-    terms_without_acute = list(set([term.replace('acute ', '').lower() for term in terms_with_acute]))
+    terms_without_acute = sorted(list(set([term.replace('acute ', '').lower() for term in terms_with_acute])))
     
-    all_pdfs = find_all_pdfs([REPORTS_FOLDER, MAIN_FOLDER])
+    exact_files, partial_files, exact_counts, partial_counts = find_and_process_pdfs(
+        [REPORTS_FOLDER, MAIN_FOLDER], 
+        terms_with_acute, 
+        terms_without_acute
+    )
+
+    # --- NEW: Build the report as a list of strings ---
+    report_lines = []
+    report_lines.append("--- Search Results ---")
+
+    # Report for List 1
+    report_lines.append(f"\n{'='*55}")
+    report_lines.append(f"## 1. List 1: Reports with original terms")
+    report_lines.append(f"{'='*55}")
+    report_lines.append("### Individual Term Counts:")
+    for term, count in exact_counts.items():
+        report_lines.append(f"  - {term:<25}: {count} reports")
+    report_lines.append(f"\n### Total Unique Reports in this Category: {len(exact_files)}")
+    report_lines.append("--- File List ---")
+    if exact_files:
+        for file_path in exact_files:
+            report_lines.append(f"- {file_path}")
+    else:
+        report_lines.append("No reports found.")
+
+    # Report for List 2
+    report_lines.append(f"\n{'='*55}")
+    report_lines.append(f"## 2. List 2: Reports with terms excluding 'acute'")
+    report_lines.append(f"{'='*55}")
+    report_lines.append("### Individual Term Counts:")
+    for term, count in partial_counts.items():
+        report_lines.append(f"  - {term:<25}: {count} reports")
+    report_lines.append(f"\n### Total Unique Reports in this Category: {len(partial_files)}")
+    report_lines.append("--- File List ---")
+    if partial_files:
+        for file_path in partial_files:
+            report_lines.append(f"- {file_path}")
+    else:
+        report_lines.append("No reports found.")
     
-    if not all_pdfs:
-        print("No PDFs found to analyze. Exiting.")
-        return
+    report_lines.append("\n--- End of Report ---")
 
-    exact_match_files, partial_match_files = [], []
+    # --- NEW: Write the entire report to the output file ---
+    try:
+        with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+            f.write("\n".join(report_lines))
+        print(f"\nAnalysis complete. Report successfully saved to: {os.path.abspath(OUTPUT_FILE)}")
+    except Exception as e:
+        print(f"\nError: Could not write report to file. {e}")
 
-    for pdf_path in tqdm(all_pdfs, desc="Analyzing Reports", unit="pdf"):
-        full_text = extract_text_from_pdf(pdf_path)
-        if full_text:
-            if any(term in full_text for term in terms_with_acute):
-                exact_match_files.append(pdf_path)
-            if any(term in full_text for term in terms_without_acute):
-                partial_match_files.append(pdf_path)
-
-    print("\n\n--- Search Results ---")
-    print(f"\n{'='*55}\n## 1. List 1: Reports with original terms\n## Found: {len(exact_match_files)} reports\n{'='*55}")
-    for file_path in (exact_match_files or ["No reports found matching the original terms."]):
-        print(f"- {file_path}")
-    print(f"\n{'='*55}\n## 2. List 2: Reports with terms excluding 'acute'\n## NOTE: This list can include duplicates from List 1.\n## Found: {len(partial_match_files)} reports\n{'='*55}")
-    for file_path in (partial_match_files or ["No reports found matching the partial terms."]):
-        print(f"- {file_path}")
-    print("\n--- End of Report ---\n")
 
 if __name__ == "__main__":
     main()
