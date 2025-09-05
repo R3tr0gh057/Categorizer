@@ -10,11 +10,12 @@ SEARCH_TERMS = [
     "acute diverticulitis",
     "acute cholecystitis",
     "acute pancreas",
-    "Appendicite"
+    "acute pancreatitis",
+    "appendicite",
+    "appendicitis"
+
 ]
 
-# NEW: Name for the output report file.
-# This file will be saved in the same directory where you run the script.
 OUTPUT_FILE = "search_report.txt"
 
 
@@ -80,7 +81,6 @@ def main():
         terms_without_acute
     )
 
-    # --- NEW: Build the report as a list of strings ---
     report_lines = []
     report_lines.append("--- Search Results ---")
 
@@ -116,7 +116,6 @@ def main():
     
     report_lines.append("\n--- End of Report ---")
 
-    # --- NEW: Write the entire report to the output file ---
     try:
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
             f.write("\n".join(report_lines))
