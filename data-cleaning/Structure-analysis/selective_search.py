@@ -1,5 +1,5 @@
 import os
-from pypdf import PdfReader
+import fitz  # The PyMuPDF library
 from tqdm import tqdm
 import logging
 
@@ -10,7 +10,6 @@ FOLDERS_TO_SCAN = [
     r"D:\OLD REPORTS\2025 JAN-JUL"
 ]
 
-# The rest of the configuration remains the same.
 SEARCH_TERMS = [
     "acute diverticulitis",
     "acute cholecystitis",
@@ -38,19 +37,20 @@ def stream_pdfs(folders_to_scan):
         try:
             for filename in os.listdir(folder):
                 if filename.lower().endswith('.pdf'):
-                    # Yield the full path of the PDF file
                     yield os.path.join(folder, filename)
         except Exception as e:
             logging.error(f"Could not read files in folder {folder}: {e}")
 
+# --- FUNCTION UPDATED FOR SPEED ---
 def extract_text_from_pdf(pdf_path):
-    """Reads all text from a PDF and returns it as a single lowercase string."""
+    """
+    Reads all text from a PDF using the much faster PyMuPDF library
+    and returns it as a single lowercase string.
+    """
     try:
-        with open(pdf_path, 'rb') as f:
-            reader = PdfReader(f)
-            # Ensure text extraction is not None before joining
-            page_texts = [page.extract_text().lower() for page in reader.pages if page.extract_text()]
-            return " ".join(page_texts)
+        with fitz.open(pdf_path) as doc:
+            # Use a generator expression for memory efficiency
+            return " ".join(page.get_text("text").lower() for page in doc)
     except Exception as e:
         logging.error(f"Failed to read or process {pdf_path}: {e}")
         return None
@@ -61,7 +61,6 @@ def find_and_process_pdfs(folders_to_scan, terms_with_acute, terms_without_acute
     """
     print("Starting analysis... Press Ctrl+C to stop.")
     
-    # Dictionaries to hold counts and file paths for each specific term
     exact_match_counts = {term: 0 for term in terms_with_acute}
     partial_match_counts = {term: 0 for term in terms_without_acute}
     
@@ -73,14 +72,12 @@ def find_and_process_pdfs(folders_to_scan, terms_with_acute, terms_without_acute
     for pdf_path in tqdm(all_pdfs, desc="Analyzing Reports", unit="pdf", mininterval=1.0):
         full_text = extract_text_from_pdf(pdf_path)
         if full_text:
-            # Positive Match Logic for List 1 (Original Terms)
             for term in terms_with_acute:
                 negative_phrase = f"no evidence of {term}"
                 if term in full_text and negative_phrase not in full_text:
                     exact_match_counts[term] += 1
                     exact_match_files[term].add(pdf_path)
             
-            # Positive Match Logic for List 2 (Terms without 'acute')
             for term in terms_without_acute:
                 negative_phrase = f"no evidence of {term}"
                 if term in full_text and negative_phrase not in full_text:
