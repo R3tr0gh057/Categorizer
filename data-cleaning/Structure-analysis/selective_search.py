@@ -3,13 +3,14 @@ from pypdf import PdfReader
 from tqdm import tqdm
 import logging
 
-# --- CONFIGURATION ---
-# IMPORTANT: Update these paths to match your system
-# D:\OLD REPORTS\2025 JAN-JUL
-# D:\OLD REPORTS\2024
-REPORTS_FOLDER = r"C:\path\to\unmatched_reports"
-MAIN_FOLDER = r"C:\path\to\matched_reports"
+# --- CONFIGURATION (UPDATED) ---
+# List of the specific folders you want to scan.
+FOLDERS_TO_SCAN = [
+    r"D:\OLD REPORTS\2024",
+    r"D:\OLD REPORTS\2025 JAN-JUL"
+]
 
+# The rest of the configuration remains the same.
 SEARCH_TERMS = [
     "acute diverticulitis",
     "acute cholecystitis",
@@ -19,22 +20,28 @@ SEARCH_TERMS = [
     "appendicitis"
 ]
 
-OUTPUT_FILE = "search_report_lucknow.txt"
+OUTPUT_FILE = "search_report_post_correction.txt"
 
 
 # --- SCRIPT ---
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def stream_pdfs(folders_to_scan):
-    """A generator that finds and 'yields' one PDF path at a time."""
+    """
+    A generator that finds PDFs directly inside the specified folders.
+    This version does NOT look into subdirectories.
+    """
     for folder in folders_to_scan:
         if not os.path.isdir(folder):
             print(f"Warning: Folder not found, skipping: {folder}")
             continue
-        for root, _, files in os.walk(folder, topdown=True):
-            for file in files:
-                if file.lower().endswith('.pdf'):
-                    yield os.path.join(root, file)
+        try:
+            for filename in os.listdir(folder):
+                if filename.lower().endswith('.pdf'):
+                    # Yield the full path of the PDF file
+                    yield os.path.join(folder, filename)
+        except Exception as e:
+            logging.error(f"Could not read files in folder {folder}: {e}")
 
 def extract_text_from_pdf(pdf_path):
     """Reads all text from a PDF and returns it as a single lowercase string."""
@@ -61,23 +68,19 @@ def find_and_process_pdfs(folders_to_scan, terms_with_acute, terms_without_acute
     exact_match_files = {term: set() for term in terms_with_acute}
     partial_match_files = {term: set() for term in terms_without_acute}
     
-    # Use a generator to avoid loading all paths into memory at once
-    pdf_generator = stream_pdfs(folders_to_scan)
-    
-    # Create a list from the generator to use with tqdm for a total count
-    all_pdfs = list(pdf_generator)
+    all_pdfs = list(stream_pdfs(folders_to_scan))
     
     for pdf_path in tqdm(all_pdfs, desc="Analyzing Reports", unit="pdf", mininterval=1.0):
         full_text = extract_text_from_pdf(pdf_path)
         if full_text:
-            # --- Positive Match Logic for List 1 (Original Terms) ---
+            # Positive Match Logic for List 1 (Original Terms)
             for term in terms_with_acute:
                 negative_phrase = f"no evidence of {term}"
                 if term in full_text and negative_phrase not in full_text:
                     exact_match_counts[term] += 1
                     exact_match_files[term].add(pdf_path)
             
-            # --- Positive Match Logic for List 2 (Terms without 'acute') ---
+            # Positive Match Logic for List 2 (Terms without 'acute')
             for term in terms_without_acute:
                 negative_phrase = f"no evidence of {term}"
                 if term in full_text and negative_phrase not in full_text:
@@ -92,7 +95,7 @@ def main():
     terms_without_acute = sorted(list(set([term.replace('acute ', '').lower() for term in terms_with_acute])))
     
     exact_files_dict, partial_files_dict, exact_counts, partial_counts = find_and_process_pdfs(
-        [REPORTS_FOLDER, MAIN_FOLDER], 
+        FOLDERS_TO_SCAN, 
         terms_with_acute, 
         terms_without_acute
     )
@@ -113,7 +116,6 @@ def main():
     report_lines.append(f"\n### Total Unique Reports in this Category: {len(total_exact_files)}")
     report_lines.append("--- File List ---")
     
-    # List files for each term individually
     for term in terms_with_acute:
         files = sorted(list(exact_files_dict[term]))
         if files:
@@ -134,7 +136,6 @@ def main():
     report_lines.append(f"\n### Total Unique Reports in this Category: {len(total_partial_files)}")
     report_lines.append("--- File List ---")
     
-    # List files for each term individually
     for term in terms_without_acute:
         files = sorted(list(partial_files_dict[term]))
         if files:
