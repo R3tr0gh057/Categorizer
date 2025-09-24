@@ -3,10 +3,8 @@ import fitz  # The PyMuPDF library
 from tqdm import tqdm
 import logging
 
-# --- CONFIGURATION (UPDATED FOR MIXED FOLDER STRUCTURES) ---
-# Folder with PDFs directly inside (no subfolders)
+# --- CONFIGURATION ---
 REPORTS_FOLDER = r"C:\path\to\unmatched_reports"
-# Folder with nested patient folders that contain PDFs
 MAIN_FOLDER = r"C:\path\to\matched_reports"
 
 SEARCH_TERMS = [
@@ -24,27 +22,29 @@ OUTPUT_FILE = "search_report_post_correction.txt"
 # --- SCRIPT ---
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# --- FUNCTION UPDATED FOR FOLDER TRAVERSAL ---
-def stream_pdfs(folders_to_scan):
+# --- FUNCTION MODIFIED FOR BETTER FEEDBACK ---
+def get_pdf_paths(folders_to_scan):
     """
-    A generator that finds and 'yields' one PDF path at a time.
-    It uses os.walk to search through all subdirectories in the given folders.
+    Scans folders and subfolders to find all PDF paths, showing a progress bar during discovery.
     """
+    pdf_paths = []
+    print("Phase 1: Discovering PDF files...")
     for folder in folders_to_scan:
         if not os.path.isdir(folder):
             print(f"Warning: Folder not found, skipping: {folder}")
             continue
-        # os.walk will traverse the entire directory tree, including the top level
-        for root, _, files in os.walk(folder, topdown=True):
+        # Using a simple loop with tqdm for immediate feedback on file discovery
+        # This is a conceptual progress bar as os.walk discovery speed varies.
+        print(f"Scanning folder: {folder}")
+        for root, _, files in tqdm(os.walk(folder, topdown=True), desc="Scanning subdirectories", unit="dir"):
             for file in files:
                 if file.lower().endswith('.pdf'):
-                    yield os.path.join(root, file)
+                    pdf_paths.append(os.path.join(root, file))
+    print(f"Discovery complete. Found {len(pdf_paths)} PDF files in total.")
+    return pdf_paths
 
 def extract_text_from_pdf(pdf_path):
-    """
-    Reads all text from a PDF using the much faster PyMuPDF library
-    and returns it as a single lowercase string.
-    """
+    """Reads all text from a PDF using PyMuPDF and returns it as a lowercase string."""
     try:
         with fitz.open(pdf_path) as doc:
             return " ".join(page.get_text("text").lower() for page in doc)
@@ -52,19 +52,17 @@ def extract_text_from_pdf(pdf_path):
         logging.error(f"Failed to read or process {pdf_path}: {e}")
         return None
 
-def find_and_process_pdfs(folders_to_scan, terms_with_acute, terms_without_acute):
+def find_and_process_pdfs(all_pdfs, terms_with_acute, terms_without_acute):
     """
-    Finds and processes PDFs, applying positive match logic for each term.
+    Processes a given list of PDFs, applying positive match logic for each term.
     """
-    print("Starting analysis... Press Ctrl+C to stop.")
+    print("\nPhase 2: Analyzing report content...")
     
     exact_match_counts = {term: 0 for term in terms_with_acute}
     partial_match_counts = {term: 0 for term in terms_without_acute}
     
     exact_match_files = {term: set() for term in terms_with_acute}
     partial_match_files = {term: set() for term in terms_without_acute}
-    
-    all_pdfs = list(stream_pdfs(folders_to_scan))
     
     for pdf_path in tqdm(all_pdfs, desc="Analyzing Reports", unit="pdf", mininterval=1.0):
         full_text = extract_text_from_pdf(pdf_path)
@@ -88,19 +86,23 @@ def main():
     terms_with_acute = sorted([term.lower() for term in SEARCH_TERMS])
     terms_without_acute = sorted(list(set([term.replace('acute ', '').lower() for term in terms_with_acute])))
     
-    # Pass the two main folders to the processing function
     folders_to_scan = [REPORTS_FOLDER, MAIN_FOLDER]
     
+    # Phase 1: Get all PDF paths with progress
+    all_pdf_paths = get_pdf_paths(folders_to_scan)
+    
+    # Phase 2: Analyze the found PDFs
     exact_files_dict, partial_files_dict, exact_counts, partial_counts = find_and_process_pdfs(
-        folders_to_scan, 
+        all_pdf_paths, 
         terms_with_acute, 
         terms_without_acute
     )
 
+    # ... (The entire reporting section is unchanged) ...
     report_lines = []
     report_lines.append("--- Search Results ---")
 
-    # --- Report for List 1 ---
+    # Report for List 1
     report_lines.append(f"\n{'='*55}")
     report_lines.append("## 1. List 1: Reports with original terms")
     report_lines.append(f"{'='*55}")
@@ -120,7 +122,7 @@ def main():
             for file_path in files:
                 report_lines.append(f"- {file_path}")
 
-    # --- Report for List 2 ---
+    # Report for List 2
     report_lines.append(f"\n{'='*55}")
     report_lines.append("## 2. List 2: Reports with terms excluding 'acute'")
     report_lines.append(f"{'='*55}")
