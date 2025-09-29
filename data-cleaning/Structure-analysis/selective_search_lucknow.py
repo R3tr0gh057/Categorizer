@@ -15,11 +15,21 @@ SEARCH_TERMS = [
     "acute cholecystitis",
     "acute pancreas",
     "acute pancreatitis",
-    "appendicite",
-    "appendicitis"
+    "acute appendicitis",
+    "cect chest",
+    "hrct chest", 
+    "Neoplastic etiology", 
+    "ca lung", 
+    "carcinoma lung", 
+    "metastasis lungs", 
+    "cancer hospital", 
+    "Rml hospital", 
+    "mitotic pathology",
+    "etiology" 
+
 ]
 
-OUTPUT_FILE = "search_report_post_correction.txt"
+OUTPUT_FILE = "search_report_lucknow_29092025.txt"
 
 
 # --- SCRIPT ---
