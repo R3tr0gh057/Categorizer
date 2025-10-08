@@ -14,7 +14,7 @@ MAIN_FOLDER = r"E:\InnoWave_Data\filestore"
 FILTER_KEYWORD = "CT Abdomen"
 
 # Name of the output file
-OUTPUT_FILE = "data-for-analysis.txt"
+OUTPUT_FILE = FILTER_KEYWORD + "-data-for-analysis.txt"
 
 # Keywords that signal the end of the "IMPRESSION" section
 STOP_KEYWORDS = [
