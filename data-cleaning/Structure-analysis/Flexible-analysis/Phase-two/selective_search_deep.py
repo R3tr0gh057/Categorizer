@@ -12,7 +12,7 @@ REPORTS_FOLDER = r"D:\DATA\Desktop\Reports"
 MAIN_FOLDER = r"E:\InnoWave_Data\filestore" 
 
 # Default search terms if none are specified via arguments
-DEFAULT_SEARCH_TERMS = [
+SEARCH_TERMS = [
     "abscess",
     "acute appendicitis",
     "acute cholecystitis",
@@ -145,7 +145,7 @@ def main():
 
     filter_keyword = args.scan if args.scan else None
     
-    search_terms = [term.lower() for term in DEFAULT_SEARCH_TERMS]
+    search_terms = [term.lower() for term in SEARCH_TERMS]
     
     # --- CORRECTION IS HERE ---
     # The FOLDERS_TO_SCAN list is now correctly passed to the function that needs it.
