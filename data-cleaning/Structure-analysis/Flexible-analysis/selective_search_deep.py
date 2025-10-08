@@ -13,12 +13,49 @@ MAIN_FOLDER = r"E:\InnoWave_Data\filestore"
 
 # Default search terms if none are specified via arguments
 DEFAULT_SEARCH_TERMS = [
-    "acute diverticulitis",
+    "abscess",
+    "acute appendicitis",
     "acute cholecystitis",
-    "acute pancreas",
+    "acute on chronic pancreatitis",
     "acute pancreatitis",
-    "appendicite",
-    "appendicitis"
+    "ascites",
+    "atherosclerotic changes",
+    "biliary sludge",
+    "bowel wall thickening",
+    "calculi",
+    "cardiomegaly",
+    "cholecystitis",
+    "cholelithiasis",
+    "cirrhosis",
+    "colitis",
+    "contracted gall bladder",
+    "cystitis",
+    "divarication of recti",
+    "diverticulitis",
+    "esophageal thickening",
+    "fatty liver",
+    "fibrocalcific changes",
+    "gall bladder wall thickening",
+    "hepatitis",
+    "hepatomegaly",
+    "hepatosplenomegaly",
+    "hernia",
+    "hydronephrosis",
+    "hydroureteronephrosis",
+    "ileitis",
+    "ileocolitis",
+    "lesion",
+    "lymphadenopathy",
+    "necrosis",
+    "pancreatitis",
+    "pericholecystic fluid",
+    "perinephric fat stranding",
+    "pleural effusion",
+    "portal hypertension",
+    "prostatomegaly",
+    "renal calculi",
+    "renal cyst",
+    "splenomegaly",
 ]
 
 OUTPUT_FILE = "search_report_results_updated.txt"
@@ -60,7 +97,6 @@ def find_and_process_pdfs(all_pdfs, terms_to_search, filter_keyword=None):
     match_counts = {term: 0 for term in terms_to_search}
     match_files = {term: set() for term in terms_to_search}
     
-    # Filter PDFs first if a keyword is provided
     if filter_keyword:
         print(f"Filtering for reports containing '{filter_keyword}'...")
         filtered_pdfs = []
@@ -81,7 +117,6 @@ def find_and_process_pdfs(all_pdfs, terms_to_search, filter_keyword=None):
         print("Analyzing all reports (no filter).")
         target_pdfs = all_pdfs
 
-    # Analyze the target PDFs
     for pdf_path in tqdm(target_pdfs, desc="Analyzing Reports", unit="pdf"):
         full_text = extract_text_from_pdf(pdf_path)
         if not full_text:
@@ -98,7 +133,6 @@ def find_and_process_pdfs(all_pdfs, terms_to_search, filter_keyword=None):
 def main():
     """Main function to parse arguments and orchestrate the PDF search."""
     
-    # --- Command-Line Argument Parsing ---
     parser = argparse.ArgumentParser(description="Scan PDF reports for specific medical terms.")
     parser.add_argument('--scan-all', action='store_true', help='Scan all PDF reports without filtering by body part.')
     parser.add_argument('--scan', type=str, metavar='"SCAN TYPE"', help='Scan only for a specific report type (e.g., "CT abdomen").')
@@ -111,24 +145,26 @@ def main():
 
     filter_keyword = args.scan if args.scan else None
     
-    # --- Main Script Logic ---
     search_terms = [term.lower() for term in DEFAULT_SEARCH_TERMS]
     
+    # --- CORRECTION IS HERE ---
+    # The FOLDERS_TO_SCAN list is now correctly passed to the function that needs it.
+    folders_to_scan = [REPORTS_FOLDER, MAIN_FOLDER]
     print("Phase 1: Discovering all PDF files...")
-    all_pdf_paths = list(stream_pdfs(FOLDERS_TO_SCAN))
+    all_pdf_paths = list(stream_pdfs(folders_to_scan)) 
+    # --- END OF CORRECTION ---
+
     if not all_pdf_paths:
         print("No PDF files found. Exiting.")
         return
     print(f"Discovery complete. Found {len(all_pdf_paths)} PDF files.\n")
 
-    # Phase 2: Analyze the found PDFs based on the filter
     files_dict, counts = find_and_process_pdfs(
         all_pdf_paths, 
         search_terms, 
         filter_keyword
     )
 
-    # --- Reporting ---
     report_lines = ["--- Search Results ---"]
     report_lines.append(f"\n{'='*55}")
     if filter_keyword:
