@@ -11,10 +11,10 @@ REPORTS_FOLDER = r"D:\DATA\Desktop\Reports"
 MAIN_FOLDER = r"E:\InnoWave_Data\filestore" 
 
 # The keyword to filter for specific scan types
-FILTER_KEYWORD = "CT Abdomen"
+FILTER_KEYWORD = "abdomen"
 
 # Name of the output file
-OUTPUT_FILE = FILTER_KEYWORD + "-data-for-analysis.txt"
+OUTPUT_FILE = FILTER_KEYWORD + "-data-for-analysis-deep.txt"
 
 # Keywords that signal the end of the "IMPRESSION" section
 STOP_KEYWORDS = [

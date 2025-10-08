@@ -13,10 +13,10 @@ FOLDERS_TO_SCAN = [
 
 # 2. Set the primary keyword to filter for specific scan types
 #    (Change this to "CT head", "CT KUB", etc., for different datasets)
-FILTER_KEYWORD = "CT Abdomen"
+FILTER_KEYWORD = "abdomen"
 
 # 3. Name of the output file
-OUTPUT_FILE = FILTER_KEYWORD + "-data-for-analysis.txt"
+OUTPUT_FILE = FILTER_KEYWORD + "-data-for-analysis-lucknow.txt"
 
 # 4. Keywords that signal the end of the "IMPRESSION" section
 STOP_KEYWORDS = [
