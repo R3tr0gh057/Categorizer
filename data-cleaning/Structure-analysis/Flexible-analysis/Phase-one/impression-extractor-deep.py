@@ -3,6 +3,7 @@ import fitz  # The PyMuPDF library
 from tqdm import tqdm
 import logging
 import re
+import argparse
 
 # --- CONFIGURATION ---
 # Folder with PDFs directly inside (no subfolders)
@@ -22,6 +23,10 @@ STOP_KEYWORDS = [
     'advice:', 'note:', 'correlation:', 'follow-up:', 'follow up:',
     '*** end of report ***', 'electronically signed', 'page 1 of', 'page 2 of'
 ]
+
+# --- NEW FEATURE: INDEX FILE ---
+INDEX_FILE = "pdf_index.txt"
+
 
 # --- SCRIPT ---
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -92,10 +97,25 @@ def main():
     """Main function to run the extraction process."""
     print("--- Starting Impression Extraction Script ---")
     
-    folders_to_scan = [REPORTS_FOLDER, MAIN_FOLDER]
-    
-    print("Phase 1: Discovering all PDF files...")
-    all_pdfs = list(stream_pdfs(folders_to_scan))
+    # --- ADDED FEATURE LOGIC: INDEXING ---
+    all_pdfs = []
+    if os.path.exists(INDEX_FILE):
+        print(f"Loading file paths from existing index '{INDEX_FILE}'...")
+        with open(INDEX_FILE, 'r', encoding='utf-8') as f:
+            all_pdfs = [line.strip() for line in f if line.strip()]
+    else:
+        print("No index file found. Creating one now (this may take a few minutes)...")
+        folders_to_scan = [REPORTS_FOLDER, MAIN_FOLDER]
+        all_pdfs = list(tqdm(stream_pdfs(folders_to_scan), desc="Indexing PDF files"))
+        try:
+            with open(INDEX_FILE, 'w', encoding='utf-8') as f:
+                for path in all_pdfs:
+                    f.write(path + '\n')
+            print(f"Index file '{INDEX_FILE}' created successfully.")
+        except Exception as e:
+            print(f"Could not write index file: {e}")
+    # --- END OF ADDED FEATURE LOGIC ---
+
     if not all_pdfs:
         print("No PDF files found in the specified directories. Exiting.")
         return
