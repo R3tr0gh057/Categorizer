@@ -59,6 +59,8 @@ SEARCH_TERMS = [
 ]
 
 OUTPUT_FILE = "search_report_results_updated.txt"
+# --- NEW FEATURE: INDEX FILE ---
+INDEX_FILE = "pdf_index.txt"
 
 
 # --- SCRIPT ---
@@ -147,12 +149,24 @@ def main():
     
     search_terms = [term.lower() for term in SEARCH_TERMS]
     
-    # --- CORRECTION IS HERE ---
-    # The FOLDERS_TO_SCAN list is now correctly passed to the function that needs it.
-    folders_to_scan = [REPORTS_FOLDER, MAIN_FOLDER]
-    print("Phase 1: Discovering all PDF files...")
-    all_pdf_paths = list(stream_pdfs(folders_to_scan)) 
-    # --- END OF CORRECTION ---
+    # --- NEW FEATURE LOGIC: INDEXING ---
+    all_pdf_paths = []
+    if os.path.exists(INDEX_FILE):
+        print(f"Loading file paths from existing index '{INDEX_FILE}'...")
+        with open(INDEX_FILE, 'r', encoding='utf-8') as f:
+            all_pdf_paths = [line.strip() for line in f if line.strip()]
+    else:
+        print("No index file found. Creating one now (this may take a few minutes)...")
+        folders_to_scan = [REPORTS_FOLDER, MAIN_FOLDER]
+        all_pdf_paths = list(tqdm(stream_pdfs(folders_to_scan), desc="Indexing PDF files"))
+        try:
+            with open(INDEX_FILE, 'w', encoding='utf-8') as f:
+                for path in all_pdf_paths:
+                    f.write(path + '\n')
+            print(f"Index file '{INDEX_FILE}' created successfully.")
+        except Exception as e:
+            print(f"Could not write index file: {e}")
+    # --- END OF NEW FEATURE LOGIC ---
 
     if not all_pdf_paths:
         print("No PDF files found. Exiting.")
