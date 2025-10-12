@@ -3,6 +3,7 @@ import fitz  # The PyMuPDF library
 from tqdm import tqdm
 import logging
 import argparse # Added for command-line arguments
+import nltk # Added for sentence splitting
 
 # --- CONFIGURATION ---
 # These folders will be scanned
@@ -74,6 +75,14 @@ OUTPUT_FILE = "search_report_lucknow_updated.txt"
 # --- SCRIPT ---
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# nltk initialization
+try:
+    nltk.data.find('tokenizers/punkt')
+except nltk.downloader.DownloadError:
+    print("First-time setup: Downloading 'punkt' tokenizer for sentence analysis...")
+    nltk.download('punkt')
+    print("Download complete.")
+
 def stream_pdfs(folders_to_scan):
     """
     A generator that finds PDFs directly inside the specified folders.
@@ -101,7 +110,7 @@ def extract_text_from_pdf(pdf_path):
 
 def find_and_process_pdfs(all_pdfs, terms_with_acute, terms_without_acute, filter_keyword=None):
     """
-    Finds and processes PDFs, applying positive match logic for each term.
+    Finds and processes PDFs, applying positive match logic at the sentence level.
     """
     print("Starting analysis... Press Ctrl+C to stop.")
 
@@ -134,15 +143,31 @@ def find_and_process_pdfs(all_pdfs, terms_with_acute, terms_without_acute, filte
     for pdf_path in tqdm(target_pdfs, desc="Analyzing Reports", unit="pdf", mininterval=1.0):
         full_text = extract_text_from_pdf(pdf_path)
         if full_text:
+            # Split the entire text into sentences once per PDF
+            sentences = nltk.sent_tokenize(full_text)
+
+            # Process List 1
             for term in terms_with_acute:
-                negative_phrase = f"no evidence of {term}"
-                if term in full_text and negative_phrase not in full_text:
+                term_found_positively = False
+                for sentence in sentences:
+                    if term in sentence:
+                        # If the term is in the sentence, check for negations in the same sentence
+                        if not any(neg in sentence for neg in ["no evidence of", "no sign of", "negative for"]):
+                            term_found_positively = True
+                            break  # A single positive mention is enough
+                if term_found_positively:
                     exact_match_counts[term] += 1
                     exact_match_files[term].add(pdf_path)
             
+            # Process List 2
             for term in terms_without_acute:
-                negative_phrase = f"no evidence of {term}"
-                if term in full_text and negative_phrase not in full_text:
+                term_found_positively = False
+                for sentence in sentences:
+                    if term in sentence:
+                        if not any(neg in sentence for neg in ["no evidence of", "no sign of", "negative for"]):
+                            term_found_positively = True
+                            break
+                if term_found_positively:
                     partial_match_counts[term] += 1
                     partial_match_files[term].add(pdf_path)
 
