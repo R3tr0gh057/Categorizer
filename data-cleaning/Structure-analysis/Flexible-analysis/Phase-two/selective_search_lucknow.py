@@ -31,7 +31,7 @@ logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %
 # nltk initialization
 try:
     nltk.data.find('tokenizers/punkt')
-except nltk.downloader.DownloadError:
+except LookupError:
     print("First-time setup: Downloading 'punkt' tokenizer for sentence analysis...")
     nltk.download('punkt')
     print("Download complete.")
@@ -61,8 +61,7 @@ def extract_text_from_pdf(pdf_path):
         logging.error(f"Failed to read or process {pdf_path}: {e}")
         return None
 
-# --- MODIFIED FUNCTION ---
-def find_and_process_pdfs(all_pdfs, search_terms, body_part_filters=None, scan_type_filters=None):
+def find_and_process_pdfs(all_pdfs, search_terms, filter_phrases=None):
     """
     Finds and processes PDFs, applying positive match logic for each term.
     """
@@ -71,53 +70,20 @@ def find_and_process_pdfs(all_pdfs, search_terms, body_part_filters=None, scan_t
     match_counts = {term: 0 for term in search_terms}
     match_files = {term: set() for term in search_terms}
     
-    # Filter PDFs first if any filters are provided
-    if body_part_filters or scan_type_filters:
-        print(f"Filtering for reports...")
+    # Filter PDFs first if filter phrases are provided
+    if filter_phrases:
+        print(f"Filtering for reports containing any of: {filter_phrases}...")
         filtered_pdfs = []
-        
-        body_filters_lower = [f.lower() for f in body_part_filters] if body_part_filters else []
-        type_filters_lower = [f.lower() for f in scan_type_filters] if scan_type_filters else []
-
+        filter_phrases_lower = [p.lower() for p in filter_phrases]
         for pdf_path in tqdm(all_pdfs, desc="Filtering PDFs", unit="pdf"):
             filename = os.path.basename(pdf_path).lower()
-            full_text = None
-
-            # 1. Check for body part (OR logic)
-            body_part_match = False
-            if not body_filters_lower:
-                body_part_match = True
-            else:
-                if any(part in filename for part in body_filters_lower):
-                    body_part_match = True
-                else:
-                    full_text = extract_text_from_pdf(pdf_path)
-                    if full_text and any(part in full_text for part in body_filters_lower):
-                        body_part_match = True
-
-            if not body_part_match:
-                continue
-
-            # 2. Check for scan type (AND logic)
-            scan_type_match = False
-            if not type_filters_lower:
-                scan_type_match = True
-            else:
-                all_types_found = True
-                for scan_type in type_filters_lower:
-                    if scan_type in filename:
-                        continue
-                    
-                    if not full_text:
-                        full_text = extract_text_from_pdf(pdf_path)
-                    
-                    if not full_text or scan_type not in full_text:
-                        all_types_found = False
-                        break
-                if all_types_found:
-                    scan_type_match = True
             
-            if body_part_match and scan_type_match:
+            if any(phrase in filename for phrase in filter_phrases_lower):
+                filtered_pdfs.append(pdf_path)
+                continue
+            
+            full_text = extract_text_from_pdf(pdf_path)
+            if full_text and any(phrase in full_text for phrase in filter_phrases_lower):
                 filtered_pdfs.append(pdf_path)
         
         print(f"Found {len(filtered_pdfs)} matching reports to analyze.")
@@ -146,13 +112,14 @@ def find_and_process_pdfs(all_pdfs, search_terms, body_part_filters=None, scan_t
 def main():
     """Main function to parse arguments and orchestrate the PDF search."""
 
-    # --- MODIFIED ARGUMENT PARSING ---
+    # --- MODIFIED: Implemented the --filter argument logic ---
     parser = argparse.ArgumentParser(description="Scan PDF reports for specific medical terms. Run with no arguments to scan all reports.")
-    parser.add_argument('--scan', type=str, nargs='+', metavar='BODY_PART', help='Scan for specific body parts (e.g., "abdomen" "chest"). At least one must be present.')
-    parser.add_argument('--type', type=str, nargs='+', metavar='SCAN_TYPE', help='Also filter by scan types (e.g., "cect" "contrast"). All types must be present.')
+    parser.add_argument('--filter', type=str, nargs='+', metavar='"PHRASE"', help='Scan only for reports containing any of the given phrases (e.g., "hrct chest" "cect thorax").')
     
     args = parser.parse_args()
     
+    filter_phrases = args.filter
+
     # --- Main Script Logic ---
     search_terms = sorted([term.lower() for term in SEARCH_TERMS])
     
@@ -166,33 +133,31 @@ def main():
     files_dict, counts = find_and_process_pdfs(
         all_pdf_paths, 
         search_terms,
-        body_part_filters=args.scan,
-        scan_type_filters=args.type
+        filter_phrases=filter_phrases
     )
 
     # --- Reporting ---
     report_lines = []
     report_lines.append("--- Search Results ---")
     
+    # Report for the consolidated list
     report_lines.append(f"\n{'='*55}")
-    if args.scan or args.type:
-        scan_info = f"Scan Body Parts: {args.scan}" if args.scan else "Any"
-        type_info = f"Scan Types: {args.type}" if args.type else "Any"
-        report_lines.append(f"## Results for reports filtered by: {scan_info} | {type_info}")
+    if filter_phrases:
+        report_lines.append(f"## Results for reports filtered by any of: {filter_phrases}")
     else:
-        report_lines.append("## Results for all scanned reports (no filters applied)")
+        report_lines.append("## Results for all scanned reports")
     report_lines.append(f"{'='*55}")
     report_lines.append("### Individual Term Counts:")
     total_unique_files = set()
     for term, count in counts.items():
         report_lines.append(f"  - {term:<25}: {count} reports")
-        total_unique_files.update(files_dict[term])
+        total_unique_files.update(files_dict.get(term, set()))
     
     report_lines.append(f"\n### Total Unique Reports in this Category: {len(total_unique_files)}")
     report_lines.append("--- File List ---")
     
     for term in search_terms:
-        files = sorted(list(files_dict[term]))
+        files = sorted(list(files_dict.get(term, [])))
         if files:
             report_lines.append(f"\n#### Files containing '{term}':")
             for file_path in files:
