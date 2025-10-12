@@ -108,16 +108,14 @@ def extract_text_from_pdf(pdf_path):
         logging.error(f"Failed to read or process {pdf_path}: {e}")
         return None
 
-def find_and_process_pdfs(all_pdfs, terms_with_acute, terms_without_acute, filter_keyword=None):
+def find_and_process_pdfs(all_pdfs, search_terms, filter_keyword=None):
     """
-    Finds and processes PDFs, applying positive match logic at the sentence level.
+    Finds and processes PDFs, applying positive match logic for each term.
     """
     print("Starting analysis... Press Ctrl+C to stop.")
 
-    exact_match_counts = {term: 0 for term in terms_with_acute}
-    partial_match_counts = {term: 0 for term in terms_without_acute}
-    exact_match_files = {term: set() for term in terms_with_acute}
-    partial_match_files = {term: set() for term in terms_without_acute}
+    match_counts = {term: 0 for term in search_terms}
+    match_files = {term: set() for term in search_terms}
     
     # Filter PDFs first if a keyword is provided
     if filter_keyword:
@@ -146,8 +144,8 @@ def find_and_process_pdfs(all_pdfs, terms_with_acute, terms_without_acute, filte
             # Split the entire text into sentences once per PDF
             sentences = nltk.sent_tokenize(full_text)
 
-            # Process List 1
-            for term in terms_with_acute:
+            # Process the single search list
+            for term in search_terms:
                 term_found_positively = False
                 for sentence in sentences:
                     if term in sentence:
@@ -156,22 +154,10 @@ def find_and_process_pdfs(all_pdfs, terms_with_acute, terms_without_acute, filte
                             term_found_positively = True
                             break  # A single positive mention is enough
                 if term_found_positively:
-                    exact_match_counts[term] += 1
-                    exact_match_files[term].add(pdf_path)
-            
-            # Process List 2
-            for term in terms_without_acute:
-                term_found_positively = False
-                for sentence in sentences:
-                    if term in sentence:
-                        if not any(neg in sentence for neg in ["no evidence of", "no sign of", "negative for"]):
-                            term_found_positively = True
-                            break
-                if term_found_positively:
-                    partial_match_counts[term] += 1
-                    partial_match_files[term].add(pdf_path)
+                    match_counts[term] += 1
+                    match_files[term].add(pdf_path)
 
-    return exact_match_files, partial_match_files, exact_match_counts, partial_match_counts
+    return match_files, match_counts
 
 def main():
     """Main function to parse arguments and orchestrate the PDF search."""
@@ -187,8 +173,7 @@ def main():
     filter_keyword = args.scan if args.scan else None
 
     # --- Main Script Logic ---
-    terms_with_acute = sorted([term.lower() for term in SEARCH_TERMS])
-    terms_without_acute = sorted(list(set([term.replace('acute ', '').lower() for term in terms_with_acute])))
+    search_terms = sorted([term.lower() for term in SEARCH_TERMS])
     
     print("Discovering PDF files...")
     all_pdf_paths = list(stream_pdfs(FOLDERS_TO_SCAN))
@@ -197,51 +182,31 @@ def main():
         return
     print(f"Discovery complete. Found {len(all_pdf_paths)} PDF files.\n")
     
-    exact_files_dict, partial_files_dict, exact_counts, partial_counts = find_and_process_pdfs(
+    files_dict, counts = find_and_process_pdfs(
         all_pdf_paths, 
-        terms_with_acute, 
-        terms_without_acute,
+        search_terms,
         filter_keyword
     )
 
     # --- Reporting ---
-    report_lines = ["--- Search Results ---"]
+    report_lines = []
+    report_lines.append("--- Search Results ---")
     
-    # Report for List 1
+    # Report for the consolidated list
     report_lines.append(f"\n{'='*55}")
-    report_lines.append("## 1. List 1: Reports with original terms")
+    report_lines.append("## 1. Search Results")
     report_lines.append(f"{'='*55}")
     report_lines.append("### Individual Term Counts:")
-    total_exact_files = set()
-    for term, count in exact_counts.items():
+    total_unique_files = set()
+    for term, count in counts.items():
         report_lines.append(f"  - {term:<25}: {count} reports")
-        total_exact_files.update(exact_files_dict[term])
+        total_unique_files.update(files_dict[term])
     
-    report_lines.append(f"\n### Total Unique Reports in this Category: {len(total_exact_files)}")
+    report_lines.append(f"\n### Total Unique Reports in this Category: {len(total_unique_files)}")
     report_lines.append("--- File List ---")
     
-    for term in terms_with_acute:
-        files = sorted(list(exact_files_dict[term]))
-        if files:
-            report_lines.append(f"\n#### Files containing '{term}':")
-            for file_path in files:
-                report_lines.append(f"- {file_path}")
-
-    # Report for List 2
-    report_lines.append(f"\n{'='*55}")
-    report_lines.append("## 2. List 2: Reports with terms excluding 'acute'")
-    report_lines.append(f"{'='*55}")
-    report_lines.append("### Individual Term Counts:")
-    total_partial_files = set()
-    for term, count in partial_counts.items():
-        report_lines.append(f"  - {term:<25}: {count} reports")
-        total_partial_files.update(partial_files_dict[term])
-        
-    report_lines.append(f"\n### Total Unique Reports in this Category: {len(total_partial_files)}")
-    report_lines.append("--- File List ---")
-    
-    for term in terms_without_acute:
-        files = sorted(list(partial_files_dict[term]))
+    for term in search_terms:
+        files = sorted(list(files_dict[term]))
         if files:
             report_lines.append(f"\n#### Files containing '{term}':")
             for file_path in files:
