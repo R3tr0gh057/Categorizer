@@ -3,17 +3,17 @@ import fitz  # PyMuPDF
 from tqdm import tqdm
 import logging
 import re
+import argparse  # <-- ADDED FOR ARGUMENTS
 
 # --- CONFIGURATION ---
 # 1. Set the folders to scan
 FOLDERS_TO_SCAN = [
-    r"D:\OLD REPORTS\2024",
-    r"D:\OLD REPORTS\2025 JAN-JUL"
+    r"D:\Projects2025\Categorizer\deep-reports"
 ]
 
 # 2. Set the primary keyword to filter for specific scan types
 #    (Change this to "CT head", "CT KUB", etc., for different datasets)
-FILTER_KEYWORD = "abdomen"
+FILTER_KEYWORD = ""
 
 # 3. Name of the output file
 OUTPUT_FILE = FILTER_KEYWORD + "-data-for-analysis-lucknow.txt"
@@ -21,8 +21,7 @@ OUTPUT_FILE = FILTER_KEYWORD + "-data-for-analysis-lucknow.txt"
 # 4. Keywords that signal the end of the "IMPRESSION" section
 STOP_KEYWORDS = [
     'dr.', 'md', 'dnb', 'consultant radiologist', 'provisional report',
-    'advice:', 'note:', 'correlation:', 'follow-up:', 'follow up:',
-    '*** end of report ***', 'electronically signed', 'page 1 of', 'page 2 of'
+    '*** end of report ***'
 ]
 
 # --- SCRIPT ---
@@ -98,9 +97,47 @@ def main():
     """Main function to run the extraction process."""
     print("--- Starting Impression Extraction Script ---")
     
-    all_pdfs = list(stream_pdfs(FOLDERS_TO_SCAN))
+    # --- MODIFICATION START ---
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="Extract impressions from PDF reports.")
+    parser.add_argument('-i', '--index', 
+                        help="Path to a custom index file (e.g., index-list.txt) containing a list of PDF paths to process.", 
+                        default=None)
+    args = parser.parse_args()
+
+    all_pdfs = []
+
+    if args.index:
+        # If index file is provided, read paths from it
+        print(f"Custom index file provided: {args.index}")
+        if not os.path.isfile(args.index):
+            print(f"Error: Index file not found at {args.index}. Exiting.")
+            return
+        
+        try:
+            with open(args.index, 'r') as f:
+                for line in f:
+                    pdf_path = line.strip()
+                    if not pdf_path:
+                        continue
+                    if os.path.isfile(pdf_path) and pdf_path.lower().endswith('.pdf'):
+                        all_pdfs.append(pdf_path)
+                    else:
+                        if not pdf_path.lower().endswith('.pdf'):
+                             tqdm.write(f"Warning: Non-PDF file in index, skipping: {pdf_path}")
+                        else:
+                            tqdm.write(f"Warning: PDF path from index not found, skipping: {pdf_path}")
+        except Exception as e:
+            print(f"Error reading index file {args.index}: {e}. Exiting.")
+            return
+    else:
+        # Original behavior: scan folders
+        print("No custom index. Scanning configured folders...")
+        all_pdfs = list(stream_pdfs(FOLDERS_TO_SCAN))
+    # --- MODIFICATION END ---
+    
     if not all_pdfs:
-        print("No PDF files found in the specified directories. Exiting.")
+        print("No PDF files found to process. Exiting.")
         return
 
     all_impressions = []
