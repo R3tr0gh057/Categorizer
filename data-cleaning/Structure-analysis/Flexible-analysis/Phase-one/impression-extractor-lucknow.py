@@ -8,7 +8,7 @@ import argparse  # <-- ADDED FOR ARGUMENTS
 # --- CONFIGURATION ---
 # 1. Set the folders to scan
 FOLDERS_TO_SCAN = [
-    r"D:\Projects2025\Categorizer\deep-reports"
+    r"C:\Users\dedse\Downloads\fwdctreports"
 ]
 
 # 2. Set the primary keyword to filter for specific scan types

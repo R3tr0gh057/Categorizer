@@ -8,7 +8,7 @@ import sys # Import sys to exit on error
 
 # --- CONFIGURATION ---
 # Default folder with PDFs directly inside (used if --use-custom-index is NOT provided)
-DEFAULT_PDF_SOURCE_FOLDER = r"D:\DATA\Desktop\Reports" # CHANGE THIS if you have a different default
+DEFAULT_PDF_SOURCE_FOLDER = r"C:\Users\dedse\Downloads\fwdctreports" # CHANGE THIS if you have a different default
 
 # Default search terms if none are specified via arguments
 # (These will be converted to lowercase later)
@@ -26,9 +26,9 @@ SEARCH_TERMS = [
 ]
 
 # Default output/index filenames (can be overridden by arguments)
-OUTPUT_FILE = "first-iteration-no-filter.txt"
+OUTPUT_FILE = "second-new-reports-iteration-no-filter.txt"
 # Default index file used when *not* using a custom index
-DEFAULT_INDEX_FILE = "pdf-index.txt"
+DEFAULT_INDEX_FILE = "new-reports-index.txt"
 
 # --- NEW: Negative Keywords for Sentence-Level Check (lowercase) ---
 # Consider expanding this list based on common radiological phrasing
@@ -310,7 +310,7 @@ def main():
         if files:
             report_lines.append(f"\n#### Files containing '{term}':")
             for file_path in files:
-                report_lines.append(f"- {file_path}") # Use the actual path from the list/index
+                report_lines.append(f"{file_path}") # Use the actual path from the list/index
 
     report_lines.append("\n--- End of Report ---")
 
